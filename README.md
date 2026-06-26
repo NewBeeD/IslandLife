@@ -62,6 +62,7 @@ npm run serve              # Fastify API on :3001 (needs DATABASE_URL)
 npm run dev:web            # Vite client on :5173, proxies /api → :3001
 npm run typecheck:web      # the web client typechecks separately (DOM/JSX)
 npm run db:apicheck        # end-to-end: begin a life, advance, assert month++ in Postgres
+npm run db:slicecheck      # end-to-end Phase 6: surface → decide → resolve → delayed consequence
 ```
 
 Open http://localhost:5173, **Begin a life**, and **Advance to next month** — the
@@ -78,7 +79,8 @@ Opportunities view. The decision is unlabelled — a steady monthly arrangement 
 the freedom of selling at the wharf — and your choice changes how your income
 behaves from then on. Months later a **Memory** entry surfaces in the feed that
 connects back to the choice without naming it. The whole loop is verified offline by
-`packages/narrative/src/__tests__/slice.test.ts`.
+`packages/narrative/src/__tests__/slice.test.ts`, and live through the API + Postgres
+by `npm run db:slicecheck`.
 
 ## Layout
 

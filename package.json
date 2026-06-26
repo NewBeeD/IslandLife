@@ -23,6 +23,7 @@
     "db:goldenmaster": "tsx packages/server/src/persistence/goldenmaster.ts",
     "db:projectcheck": "tsx packages/server/src/persistence/projectcheck.ts",
     "db:apicheck": "tsx packages/server/src/persistence/apicheck.ts",
+    "db:slicecheck": "tsx packages/server/src/persistence/slicecheck.ts",
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down"
   },
