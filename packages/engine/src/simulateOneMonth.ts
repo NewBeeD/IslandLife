@@ -125,5 +125,14 @@ export function simulateOneMonth(world: WorldState): WorldState {
   world.playerLegacy = computeLegacyIncrement(world.player, world);
 
   world.month = month + 1;
+
+  // PHASE 11: aging. Everyone gains a year every twelve months (an anniversary of
+  // the game's January start). Age is felt through narrative and, past 40, physical
+  // output — never shown as a stat. Deterministic (no RNG draw), so it does not
+  // touch the world digest or the (seed, decisions) reproduction guarantee.
+  if (world.month % 12 === 0) {
+    for (const agent of world.agents) agent.age += 1;
+  }
+
   return world;
 }

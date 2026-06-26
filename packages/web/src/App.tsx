@@ -1,11 +1,19 @@
 import { useCallback, useState } from 'react';
-import type { FeedEntryDTO, MoneyDTO, OpportunitiesDTO, StateDTO } from '@island/shared';
-import { api } from './api/client';
+import type {
+  CommunityDTO,
+  FeedEntryDTO,
+  MoneyDTO,
+  OpportunitiesDTO,
+  StateDTO,
+} from '@island/shared';
+import { api, type CreationChoicesInput } from './api/client';
+import { CharacterCreation } from './views/CharacterCreation';
+import { Community } from './views/Community';
 import { DailyLife } from './views/DailyLife';
 import { Money } from './views/Money';
 import { Opportunities } from './views/Opportunities';
 
-type View = 'daily' | 'money' | 'opportunities';
+type View = 'daily' | 'community' | 'money' | 'opportunities';
 
 export function App() {
   const [saveId, setSaveId] = useState<string | null>(null);
@@ -13,36 +21,46 @@ export function App() {
   const [state, setState] = useState<StateDTO | null>(null);
   const [feed, setFeed] = useState<FeedEntryDTO[]>([]);
   const [money, setMoney] = useState<MoneyDTO | null>(null);
+  const [community, setCommunity] = useState<CommunityDTO | null>(null);
   const [opportunities, setOpportunities] = useState<OpportunitiesDTO | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async (id: string) => {
-    const [s, f, m, o] = await Promise.all([
+    const [s, f, m, c, o] = await Promise.all([
       api.state(id),
       api.feed(id),
       api.money(id),
+      api.community(id),
       api.opportunities(id),
     ]);
     setState(s);
     setFeed(f.entries);
     setMoney(m);
+    setCommunity(c);
     setOpportunities(o);
   }, []);
 
-  const begin = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const created = await api.createSave({});
-      setSaveId(created.saveId);
-      await refresh(created.saveId);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }, [refresh]);
+  const begin = useCallback(
+    async (creationChoices: CreationChoicesInput, name: string) => {
+      setBusy(true);
+      setError(null);
+      try {
+        // Blank name → omit it so the engine assigns a Dominican name itself.
+        const created = await api.createSave({
+          creationChoices,
+          ...(name ? { playerName: name } : {}),
+        });
+        setSaveId(created.saveId);
+        await refresh(created.saveId);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [refresh],
+  );
 
   const advance = useCallback(async () => {
     if (!saveId) return;
@@ -59,16 +77,7 @@ export function App() {
   }, [saveId, refresh]);
 
   if (!saveId || !state) {
-    return (
-      <main className="start">
-        <h1>Island Life</h1>
-        <p className="muted">A life and economy in Dominica, one month at a time.</p>
-        <button className="primary" onClick={begin} disabled={busy}>
-          {busy ? 'Beginning…' : 'Begin a life'}
-        </button>
-        {error && <p className="error">{error}</p>}
-      </main>
-    );
+    return <CharacterCreation busy={busy} error={error} onComplete={begin} />;
   }
 
   const openCount = opportunities?.active.length ?? 0;
@@ -93,6 +102,12 @@ export function App() {
         <button className={view === 'daily' ? 'active' : ''} onClick={() => setView('daily')}>
           Daily Life
         </button>
+        <button
+          className={view === 'community' ? 'active' : ''}
+          onClick={() => setView('community')}
+        >
+          Community
+        </button>
         <button className={view === 'money' ? 'active' : ''} onClick={() => setView('money')}>
           Money
         </button>
@@ -107,6 +122,7 @@ export function App() {
 
       <section className="content">
         {view === 'daily' && <DailyLife entries={feed} />}
+        {view === 'community' && community && <Community community={community} />}
         {view === 'money' && money && <Money money={money} />}
         {view === 'opportunities' && opportunities && (
           <Opportunities

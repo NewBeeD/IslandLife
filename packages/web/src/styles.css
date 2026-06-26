@@ -57,6 +57,88 @@ button:disabled {
   margin-bottom: 0.25rem;
 }
 
+/* Character creation */
+.creation__intro {
+  line-height: 1.65;
+  margin: 1.5rem 0;
+  text-align: left;
+}
+.creation__name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  text-align: left;
+  margin: 1.5rem 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+.creation__name input {
+  font-family: inherit;
+  font-size: 1.05rem;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.6rem 0.8rem;
+}
+.creation__name input:focus {
+  outline: none;
+  border-color: var(--sea);
+}
+
+.creation {
+  max-width: 38rem;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 3rem 1rem 4rem;
+}
+.creation__progress {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  margin-bottom: 1rem;
+}
+.creation__prompt {
+  font-size: 1.35rem;
+  line-height: 1.5;
+  margin: 0 0 1.6rem;
+}
+.creation__options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+.creation__option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.9rem 1.1rem;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+.creation__option strong {
+  font-size: 1.05rem;
+}
+.creation__option:hover:not(:disabled) {
+  border-color: var(--sea);
+}
+.creation__back {
+  align-self: flex-start;
+  margin-top: 1rem;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 0.2rem 0;
+}
+
 /* App shell */
 .app {
   max-width: 44rem;
@@ -128,6 +210,38 @@ button:disabled {
 .entry--decision_required {
   border-left: 3px solid var(--sea);
   padding-left: 1rem;
+}
+
+/* Community */
+.community {
+  max-width: 32rem;
+}
+.community section {
+  margin-bottom: 1.8rem;
+}
+.community h3 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.3rem;
+}
+.community__rep-text {
+  line-height: 1.65;
+}
+.rel {
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.rel__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.rel__standing {
+  margin: 0.3rem 0 0;
+  line-height: 1.55;
 }
 
 /* Money */
