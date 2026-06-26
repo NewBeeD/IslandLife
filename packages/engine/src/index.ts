@@ -35,6 +35,13 @@ export {
   CONSEQUENCE_LAG_MONTHS,
 } from './opportunities';
 export type { UpgradeQuote, UpgradeResolution } from './opportunities';
+export {
+  hasVentures,
+  activeVentures,
+  ventureIncomeLines,
+  aggregateVentureIncome,
+  totalOperatingCosts,
+} from './ventures';
 export { worldDigest } from './digest';
 export { serializeWorld, deserializeWorld } from './serialize';
 export type { SerializedWorld, SerializedAgent, SerializedCompany } from './serialize';

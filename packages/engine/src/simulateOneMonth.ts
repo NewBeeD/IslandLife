@@ -7,6 +7,7 @@ import { rollRandomEvents } from './events';
 import { governmentAct } from './government';
 import { computeLegacyIncrement } from './legacy';
 import { updateMarketPrice } from './market';
+import { activeVentures, hasVentures, totalOperatingCosts } from './ventures';
 
 // Consecutive unmet-payment months before the player's loans fall into default
 // (Phase 7). NPCs default on the first month they cannot cover (unchanged).
@@ -69,8 +70,9 @@ export function simulateOneMonth(world: WorldState): WorldState {
     const surplus = Math.max(0, income - agent.monthlyLivingCosts);
     const spending = agent.monthlyLivingCosts + 0.5 * surplus;
     // Fuel/upkeep on owned equipment (Phase 7) — 0 for everyone without an upgrade,
-    // so NPC and default-player cash math is unchanged (the digest holds).
-    const operating = agent.monthlyOperatingCosts ?? 0;
+    // so NPC and default-player cash math is unchanged (the digest holds). Phase 8:
+    // a venture portfolio sums upkeep across its ventures (still 0 for NPCs).
+    const operating = totalOperatingCosts(agent);
     const newCash = agent.cash + income - personalLoanPayments - spending - operating;
     const hasActiveLoan = agent.loans.some((l) => l.status === 'ACTIVE');
 
@@ -128,13 +130,21 @@ export function simulateOneMonth(world: WorldState): WorldState {
 
   // PHASE 9: knowledge & experience
   for (const agent of world.agents) {
-    const activeDomain = agent.occupation ? INDUSTRY_DOMAIN[agent.occupation] : null;
-    if (activeDomain) {
-      const gain = 0.008 * (1 + agent.knowledgeAcquisitionRate);
-      agent.experience[activeDomain] = Math.min(1, agent.experience[activeDomain] + gain);
+    // Every active venture's domain earns experience (Phase 8); a single-occupation
+    // agent (every NPC, a pre-Phase-8 player) credits exactly its one domain, so the
+    // digest is unchanged.
+    const activeDomains = new Set<keyof typeof agent.experience>();
+    if (hasVentures(agent)) {
+      for (const v of activeVentures(agent)) activeDomains.add(INDUSTRY_DOMAIN[v.industry]);
+    } else if (agent.occupation) {
+      activeDomains.add(INDUSTRY_DOMAIN[agent.occupation]);
+    }
+    const gain = 0.008 * (1 + agent.knowledgeAcquisitionRate);
+    for (const domain of activeDomains) {
+      agent.experience[domain] = Math.min(1, agent.experience[domain] + gain);
     }
     for (const domain of Object.keys(agent.knowledge) as (keyof typeof agent.knowledge)[]) {
-      if (domain !== activeDomain) {
+      if (!activeDomains.has(domain as keyof typeof agent.experience)) {
         agent.knowledge[domain] = Math.max(0, agent.knowledge[domain] - 0.002);
       }
     }

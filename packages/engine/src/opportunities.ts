@@ -9,6 +9,7 @@ import type {
 } from '@island/shared';
 import { assessLoanApplication, originateLoan } from './banking';
 import type { LoanAssessment } from './banking';
+import { activeVentures, aggregateVentureIncome, hasVentures } from './ventures';
 import { clamp } from './rng';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -146,22 +147,54 @@ const DOMAIN_OF: Record<Industry, keyof WorldState['player']['experience']> = {
   TRANSPORTATION: 'transportation', FINANCE: 'finance',
 };
 
-// The next upgrade to offer the player, or null. Deterministic: the lowest-priced
-// eligible tier (by experience) they do not already own. Only self-employed players
-// with a tradeable occupation get a ladder.
-function nextUpgradeFor(world: WorldState): UpgradeTemplate | null {
-  const p = world.player;
-  if (p.employmentStatus !== 'SELF_EMPLOYED' || !p.occupation) return null;
-  const ladder = UPGRADE_CATALOGUE[p.occupation];
+interface UpgradeCandidate {
+  template: UpgradeTemplate;
+  industry: Industry;
+  ventureId?: string; // undefined → the implicit single-stream player ("venture 0")
+}
+
+// A venture asset's id is `${rungId}@${ventureId}` so distinct ventures can each buy
+// the same rung; recover the rung id for the ownership check.
+function rungIdOf(assetId: string): string {
+  const at = assetId.indexOf('@');
+  return at === -1 ? assetId : assetId.slice(0, at);
+}
+
+// The next eligible rung for a trade: the lowest-priced tier past the experience
+// gate that the owner does not already hold.
+function nextRung(industry: Industry, experience: number, ownedRungIds: Set<string>): UpgradeTemplate | null {
+  const ladder = UPGRADE_CATALOGUE[industry];
   if (!ladder) return null;
-  const experience = p.experience[DOMAIN_OF[p.occupation]] ?? 0;
-  const owned = new Set(p.economicAssets.map((a) => a.id));
   for (const t of ladder) {
     if (experience < t.minExperience) continue;
-    if (owned.has(t.id)) continue; // already bought this rung
+    if (ownedRungIds.has(t.id)) continue; // already bought this rung
     return t;
   }
   return null;
+}
+
+// The upgrades available right now, one per growable trade. A venture portfolio
+// yields a candidate per active venture (each its own ladder, gated by the player's
+// experience in that domain); a single-stream self-employed player yields the one
+// candidate for their occupation (byte-identical to Phase 7). Deterministic.
+function upgradeCandidates(world: WorldState): UpgradeCandidate[] {
+  const p = world.player;
+  const out: UpgradeCandidate[] = [];
+  if (hasVentures(p)) {
+    for (const v of activeVentures(p)) {
+      const exp = p.experience[DOMAIN_OF[v.industry]] ?? 0;
+      const owned = new Set(v.assets.map((a) => rungIdOf(a.id)));
+      const t = nextRung(v.industry, exp, owned);
+      if (t) out.push({ template: t, industry: v.industry, ventureId: v.id });
+    }
+    return out;
+  }
+  if (p.employmentStatus !== 'SELF_EMPLOYED' || !p.occupation) return out;
+  const exp = p.experience[DOMAIN_OF[p.occupation]] ?? 0;
+  const owned = new Set(p.economicAssets.map((a) => a.id));
+  const t = nextRung(p.occupation, exp, owned);
+  if (t) out.push({ template: t, industry: p.occupation });
+  return out;
 }
 
 // Whether a cooldown is in effect since the last upgrade offer lapsed or was taken.
@@ -178,14 +211,16 @@ function upgradeOnCooldown(world: WorldState): boolean {
 
 function surfaceUpgrade(world: WorldState): Opportunity | null {
   if (upgradeOnCooldown(world)) return null;
-  const t = nextUpgradeFor(world);
-  if (!t) return null;
-  const oppId = `OPP_${t.id}_${world.month}`;
-  const decId = `DEC_${t.id}_${world.month}`;
+  const candidate = upgradeCandidates(world)[0];
+  if (!candidate) return null;
+  const { template: t, industry, ventureId } = candidate;
+  const suffix = ventureId ? `${ventureId}_` : '';
+  const oppId = `OPP_${t.id}_${suffix}${world.month}`;
+  const decId = `DEC_${t.id}_${suffix}${world.month}`;
   const opportunity: Opportunity = {
     id: oppId,
     kind: 'ASSET_UPGRADE',
-    industry: world.player.occupation!,
+    industry,
     npcName: t.vendorName,
     channelId: UPGRADE_CHANNEL,
     surfacedMonth: world.month,
@@ -199,6 +234,9 @@ function surfaceUpgrade(world: WorldState): Opportunity | null {
       operatingCostDelta: t.operatingCostDelta, riskLevel: t.riskLevel,
       minTermMonths: t.minTermMonths, maxTermMonths: t.maxTermMonths,
     },
+    // Only set when targeting a venture, so the single-stream opportunity is
+    // byte-identical to Phase 7 (no `ventureId` key).
+    ...(ventureId ? { ventureId } : {}),
   };
   const decision: PlayerDecision = {
     id: decId,
@@ -415,29 +453,55 @@ export function applyUpgradeFinancing(
   }
 
   p.cash -= effectiveDown;
+
+  // Phase 8: an upgrade may target a specific venture; otherwise it grows the
+  // implicit single-stream player. The loan is the player's debt either way.
+  const venture = opportunity.ventureId
+    ? activeVentures(p).find((v) => v.id === opportunity.ventureId)
+    : undefined;
+  if (opportunity.ventureId && !venture) {
+    throw new DecisionError('That venture is no longer active.', 'NOT_FOUND');
+  }
+  const purposeIndustry = venture ? venture.industry : p.occupation ?? undefined;
   if (principal > 0) {
     originateLoan(
       world, p, a.bankId, principal, a.interestRate, a.monthlyPayment, a.termMonths,
-      p.occupation ?? undefined,
+      purposeIndustry,
     );
   }
-  p.economicAssets.push({
-    id: spec.id, type: spec.assetType, size: spec.assetSize, value: spec.assetPrice,
-  });
-  p.outputScale = (p.outputScale ?? 1) + spec.outputScaleDelta;
-  p.monthlyOperatingCosts = (p.monthlyOperatingCosts ?? 0) + spec.operatingCostDelta;
 
-  // Income footing: a standing-contract player grows the contract with their new
-  // supply; everyone else goes onto a market footing (so seasonality bites) scaled
-  // by the bigger output.
-  if (p.incomeMode === 'STANDING' && p.standingContract) {
-    p.standingContract.monthlyAmount = Math.round(
-      p.standingContract.monthlyAmount * (1 + spec.outputScaleDelta),
-    );
-    p.monthlyIncome = p.standingContract.monthlyAmount;
-  } else if (p.incomeMode !== 'SPOT') {
-    p.incomeMode = 'SPOT';
-    p.spotBaseIncome = p.spotBaseIncome ?? p.monthlyIncome;
+  if (venture) {
+    // The asset and the output/cost bump land on that venture only — the rest of the
+    // portfolio is untouched.
+    venture.assets.push({
+      id: `${spec.id}@${venture.id}`, type: spec.assetType, size: spec.assetSize, value: spec.assetPrice,
+    });
+    venture.outputScale += spec.outputScaleDelta;
+    venture.monthlyOperatingCosts += spec.operatingCostDelta;
+    if (venture.incomeMode === 'STANDING' && venture.standingContract) {
+      venture.standingContract.monthlyAmount = Math.round(
+        venture.standingContract.monthlyAmount * (1 + spec.outputScaleDelta),
+      );
+    }
+  } else {
+    p.economicAssets.push({
+      id: spec.id, type: spec.assetType, size: spec.assetSize, value: spec.assetPrice,
+    });
+    p.outputScale = (p.outputScale ?? 1) + spec.outputScaleDelta;
+    p.monthlyOperatingCosts = (p.monthlyOperatingCosts ?? 0) + spec.operatingCostDelta;
+
+    // Income footing: a standing-contract player grows the contract with their new
+    // supply; everyone else goes onto a market footing (so seasonality bites) scaled
+    // by the bigger output.
+    if (p.incomeMode === 'STANDING' && p.standingContract) {
+      p.standingContract.monthlyAmount = Math.round(
+        p.standingContract.monthlyAmount * (1 + spec.outputScaleDelta),
+      );
+      p.monthlyIncome = p.standingContract.monthlyAmount;
+    } else if (p.incomeMode !== 'SPOT') {
+      p.incomeMode = 'SPOT';
+      p.spotBaseIncome = p.spotBaseIncome ?? p.monthlyIncome;
+    }
   }
 
   decision.chosenOptionId = 'ACCEPT_UPGRADE';
@@ -460,6 +524,12 @@ export function applyUpgradeFinancing(
 // so the default player's income is untouched (the golden master holds). Pure.
 export function updatePlayerIncome(world: WorldState): void {
   const p = world.player;
+  // Phase 8: a venture portfolio earns the sum of its active ventures' income; the
+  // single-stream fields below are unused once `ventures` is populated.
+  if (hasVentures(p)) {
+    p.monthlyIncome = aggregateVentureIncome(world);
+    return;
+  }
   if (p.incomeMode === 'STANDING' && p.standingContract) {
     p.monthlyIncome = p.standingContract.monthlyAmount;
     return;

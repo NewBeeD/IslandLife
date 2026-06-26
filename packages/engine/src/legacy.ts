@@ -2,8 +2,12 @@ import type { LegacyScore, NPCAgent, WorldState } from '@island/shared';
 
 export function netWorthOf(agent: NPCAgent): number {
   const assets = agent.economicAssets.reduce((s, a) => s + a.value, 0);
+  // Phase 8: venture-owned assets count too. Undefined `ventures` → 0 (unchanged).
+  const ventureAssets = (agent.ventures ?? [])
+    .filter((v) => v.status === 'ACTIVE')
+    .reduce((s, v) => s + v.assets.reduce((t, a) => t + a.value, 0), 0);
   const debt = agent.loans.reduce((s, l) => s + l.remainingPrincipal, 0);
-  return agent.cash + assets - debt;
+  return agent.cash + assets + ventureAssets - debt;
 }
 
 // Accrues each month, hidden until death (Player Experience doc).

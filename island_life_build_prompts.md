@@ -6,13 +6,13 @@ of work with an acceptance test, the files it touches, and its dependencies.
 
 - **Design source of truth:** the five `island_life_*.md` docs.
 - **Build sequence:** `island_life_technical_architecture.md` → "Build Sequence".
-- **Current state:** Phases 0–6 complete (scaffold, headless engine, persistence,
+- **Current state:** Phases 0–8 complete (scaffold, headless engine, persistence,
   character creation, the Fastify API + iceberg projection + template narrative
-  + React/Vite client, the Layer-2 Claude Opus 4.8 narrative, and the vertical
-  slice — one unlabelled decision loop with a delayed consequence). **Phase 7 (in
-  progress):** grounded character creation, the generative opportunity + bank
-  financing system, and a real money view. **Next (Phases 8–11) — the diversified
-  economy:** a portfolio of concurrent ventures (the income spine), education &
+  + React/Vite client, the Layer-2 Claude Opus 4.8 narrative, the vertical
+  slice — one unlabelled decision loop with a delayed consequence, the grounded
+  livelihoods + generative opportunity + bank financing + real money view of
+  Phase 7, and the Phase 8 venture portfolio — concurrent income streams that sum
+  each month). **Next (Phases 9–11) — the diversified economy:** education &
   credentials, cross-domain opportunities + saturating side hustles, and
   equity/crowdfunding/NPC partnerships. Then the post-slice backlog (P-B1 firm
   formation onward).
@@ -285,7 +285,7 @@ These are the guardrails I follow on every change; they're not steps, they're co
 
 ---
 
-## Phase 7 — Grounded life, generative opportunities, real money 🔨 IN PROGRESS
+## Phase 7 — Grounded life, generative opportunities, real money ✅ DONE
 
 > Goal: ground character creation in everyday small-island livelihoods; make
 > opportunities **always available** for the player's trade at varying risk and
@@ -386,7 +386,7 @@ These are the guardrails I follow on every change; they're not steps, they're co
 
 ---
 
-## Phase 8 — A portfolio of ventures (the income spine) 🔜 PLANNED
+## Phase 8 — A portfolio of ventures (the income spine) ✅ DONE
 
 > Goal: the player stops being one-occupation / one-income and becomes a set of
 > **concurrent ventures**, each with its own assets, output, operating cost, and
@@ -439,10 +439,15 @@ These are the guardrails I follow on every change; they're not steps, they're co
   *Files:* `engine/simulateOneMonth.ts`. *Acceptance:* running two ventures grows
   two experience domains; the single-occupation path is unchanged.
 
-- *Phase acceptance:* `npm run typecheck && npm run typecheck:web && npm test`
-  green; a fishing player who also runs a taxi sees two income lines that sum on the
-  Money view; the determinism digest is updated **once, with a note**, and only the
-  with-ventures path moves it.
+- *Phase acceptance:* ✅ `npm run typecheck && npm run typecheck:web && npm test`
+  green (103 tests; the no-venture path is byte-identical so the determinism digest
+  is **unchanged** — ventures are additive and only the with-ventures path differs);
+  a fishing player who also runs a taxi sees two income lines that sum on the Money
+  view. New `engine/ventures.ts` (`hasVentures`/`activeVentures`/`ventureIncomeLines`/
+  `aggregateVentureIncome`/`totalOperatingCosts`); `Venture` + optional `ventures?`
+  on `NPCAgent` and `ventureId?` on `Opportunity`; per-venture income aggregation,
+  upgrade targeting, money-view breakdown, and experience credit; 6 new tests in
+  `engine/src/__tests__/ventures.test.ts`.
 
 ---
 

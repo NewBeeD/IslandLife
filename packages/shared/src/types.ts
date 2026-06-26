@@ -119,6 +119,26 @@ export interface Company {
   estimatedAnnualTax: number;
 }
 
+// ── Ventures (Phase 8: the income spine) ─────────────────────────────────────
+// A concurrent income stream the player runs — a fishing boat, a minibus route, a
+// roadside juice stand — each with its own assets, output, operating cost, and
+// income mode. A player's monthly income is the sum across active ventures. All
+// optional: when `ventures` is undefined the implicit single-stream fields on the
+// agent (incomeMode/spotBaseIncome/standingContract/outputScale/monthlyOperatingCosts)
+// are "venture 0" and behaviour is byte-identical to Phase 7 (S2, the digest holds).
+export interface Venture {
+  id: string;
+  industry: Industry;
+  label: string; // player-facing prose: "your fishing", "the minibus"
+  incomeMode: 'SPOT' | 'STANDING';
+  spotBaseIncome: number; // base monthly take before output scaling & seasonality
+  standingContract: { opportunityId: string; monthlyAmount: number } | null;
+  outputScale: number; // multiplies output after an upgrade (init 1)
+  monthlyOperatingCosts: number; // EC$/month fuel & upkeep across this venture's assets
+  assets: Asset[]; // assets owned by this venture (financed upgrades land here)
+  status: 'ACTIVE' | 'CLOSED';
+}
+
 export interface NPCAgent {
   id: string;
   name: string;
@@ -199,6 +219,12 @@ export interface NPCAgent {
   outputScale?: number;
   monthlyOperatingCosts?: number;
   loanArrearsMonths?: number;
+
+  // ── Phase 8: the venture portfolio (the income spine) ───────────────────────
+  // Optional. When present and non-empty, the player's income is the sum across
+  // active ventures and the single-stream fields above are unused. Undefined for
+  // NPCs and a pre-Phase-8 player, so they stay byte-identical (the digest holds).
+  ventures?: Venture[];
 }
 
 export interface ActivePolicy {
@@ -280,6 +306,9 @@ export interface Opportunity {
   // Hidden mechanics — never projected raw.
   monthlyAmount: number; // EC$ the standing arrangement guarantees (Eunice; 0 for upgrades)
   upgrade?: UpgradeSpec; // present for ASSET_UPGRADE opportunities
+  // The venture this upgrade grows (Phase 8). Undefined → the implicit single-stream
+  // player ("venture 0"); set → the asset and output bump land on that venture.
+  ventureId?: string;
 }
 
 // One unlabelled option. `label`/`description` are neutral player-facing prose (no
