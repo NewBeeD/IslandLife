@@ -1,13 +1,29 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
-import { simulateOneMonth, type CreationChoices } from '@island/engine';
 import {
+  DecisionError,
+  detectDueConsequences,
+  resolveDecision,
+  simulateOneMonth,
+  surfaceOpportunities,
+  updatePlayerIncome,
+  type CreationChoices,
+} from '@island/engine';
+import {
+  buildDecisionAcknowledgement,
   captureTriggerSnapshot,
   detectTriggers,
+  generateConsequenceEntry,
   generateMonthlyEntries,
   generateNarrativeEntry,
 } from '@island/narrative';
 import { gameDateLabel } from '@island/shared';
-import type { AdvanceResultDTO, CreateSaveResultDTO, WorldState } from '@island/shared';
+import type {
+  AdvanceResultDTO,
+  CreateSaveResultDTO,
+  DecisionResultDTO,
+  NarrativeEntry,
+  WorldState,
+} from '@island/shared';
 import { createSave, loadSave, saveTick } from './persistence/saves';
 import { appendNarrativeEntries, loadFeed, saveNarrativeEntries } from './persistence/narratives';
 import {
@@ -17,6 +33,7 @@ import {
 } from './narrative/worker';
 import {
   toCommunityDTO,
+  toDecisionDTO,
   toFeedDTO,
   toMoneyDTO,
   toOpportunitiesDTO,
@@ -130,12 +147,60 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
     return toCommunityDTO(loaded.world);
   });
 
-  // GET /saves/:id/opportunities — only what the player has heard of (empty pre-P6).
+  // GET /saves/:id/opportunities — only what the player has heard of, through their
+  // own information channels (P6.1).
   app.get<{ Params: { id: string } }>('/saves/:id/opportunities', async (req, reply) => {
     const loaded = await loadOr404(req.params.id, reply);
     if (!loaded) return;
     return toOpportunitiesDTO(loaded.world);
   });
+
+  // GET /saves/:id/decisions/:did — the decision interface: situation + unlabelled
+  // options (P6.2). The hidden option mechanics never cross the wire.
+  app.get<{ Params: { id: string; did: string } }>(
+    '/saves/:id/decisions/:did',
+    async (req, reply) => {
+      const loaded = await loadOr404(req.params.id, reply);
+      if (!loaded) return;
+      const dto = toDecisionDTO(loaded.world, req.params.did);
+      if (!dto) return reply.code(404).send({ error: `decision ${req.params.did} not found` });
+      return dto;
+    },
+  );
+
+  // POST /saves/:id/decisions/:did — submit a choice. Feeds it back into the
+  // player's economic state (P6.3) and persists. Body: { optionId }.
+  app.post<{ Params: { id: string; did: string }; Body: { optionId?: string } }>(
+    '/saves/:id/decisions/:did',
+    async (req, reply) => {
+      const loaded = await loadOr404(req.params.id, reply);
+      if (!loaded) return;
+      const optionId = req.body?.optionId;
+      if (!optionId) return reply.code(400).send({ error: 'optionId is required' });
+
+      const { world } = loaded;
+      let decision;
+      try {
+        decision = resolveDecision(world, req.params.did, optionId);
+      } catch (err) {
+        if (err instanceof DecisionError) {
+          const code =
+            err.code === 'NOT_FOUND' ? 404 : err.code === 'ALREADY_RESOLVED' ? 409 : 400;
+          return reply.code(code).send({ error: err.message });
+        }
+        throw err;
+      }
+
+      await saveTick(req.params.id, world);
+
+      const result: DecisionResultDTO = {
+        decisionId: decision.id,
+        chosenOptionId: decision.chosenOptionId!,
+        acknowledgement: buildDecisionAcknowledgement(world, decision),
+      };
+      return result;
+    },
+  );
 
   // POST /saves/:id/advance — advance one month. Runs simulateOneMonth, fires the
   // Layer-1 template narrative synchronously, persists both, and returns the
@@ -150,8 +215,22 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
     // transitions (a new business, a freshly-formed storm).
     const snapshot = captureTriggerSnapshot(world);
 
+    // Apply the player's chosen income behaviour (standing contract vs. spot
+    // selling) before the month runs (P6.3). A no-op until a decision sets it.
+    updatePlayerIncome(world);
+
     simulateOneMonth(world);
     const entries = generateMonthlyEntries(world);
+
+    // Surface any newly-available opportunity through the information channels
+    // (P6.1), and render any delayed consequence that comes due this month as a
+    // MEMORY entry alongside the template feed (P6.4). Both are deterministic and
+    // ride the synchronous write, so the slice plays fully offline.
+    surfaceOpportunities(world);
+    const consequences: NarrativeEntry[] = detectDueConsequences(world).map((d) =>
+      generateConsequenceEntry(world, d),
+    );
+    entries.push(...consequences);
 
     await saveTick(req.params.id, world);
     await saveNarrativeEntries(req.params.id, world.month, entries);

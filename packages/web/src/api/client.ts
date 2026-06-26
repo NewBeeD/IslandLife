@@ -2,6 +2,8 @@ import type {
   AdvanceResultDTO,
   CommunityDTO,
   CreateSaveResultDTO,
+  DecisionDTO,
+  DecisionResultDTO,
   FeedDTO,
   MoneyDTO,
   OpportunitiesDTO,
@@ -58,6 +60,12 @@ export const api = {
   },
   opportunities(saveId: string) {
     return get<OpportunitiesDTO>(`/saves/${saveId}/opportunities`);
+  },
+  decision(saveId: string, decisionId: string) {
+    return get<DecisionDTO>(`/saves/${saveId}/decisions/${decisionId}`);
+  },
+  resolveDecision(saveId: string, decisionId: string, optionId: string) {
+    return post<DecisionResultDTO>(`/saves/${saveId}/decisions/${decisionId}`, { optionId });
   },
   advance(saveId: string) {
     return post<AdvanceResultDTO>(`/saves/${saveId}/advance`);

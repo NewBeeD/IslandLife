@@ -13,6 +13,19 @@ export { rollRandomEvents } from './events';
 export { governmentAct, computeTaxRevenue } from './government';
 export { computeLegacyIncrement, netWorthOf } from './legacy';
 export { npcDecide, applyAction, triggerPersonalLoanDefault } from './agents';
+export {
+  surfaceOpportunities,
+  resolveDecision,
+  updatePlayerIncome,
+  detectDueConsequences,
+  DecisionError,
+  EUNICE_OPPORTUNITY_ID,
+  EUNICE_DECISION_ID,
+  EUNICE_NPC_NAME,
+  EUNICE_OPTION_ACCEPT,
+  EUNICE_OPTION_DECLINE,
+  CONSEQUENCE_LAG_MONTHS,
+} from './opportunities';
 export { worldDigest } from './digest';
 export { serializeWorld, deserializeWorld } from './serialize';
 export type { SerializedWorld, SerializedAgent, SerializedCompany } from './serialize';

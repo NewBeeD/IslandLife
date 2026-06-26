@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { buildWorld, simulateOneMonth } from '@island/engine';
+import {
+  EUNICE_DECISION_ID,
+  buildWorld,
+  simulateOneMonth,
+  surfaceOpportunities,
+} from '@island/engine';
 import { generateMonthlyEntries } from '@island/narrative';
 import type { CreationChoices } from '@island/engine';
 import {
   toCommunityDTO,
+  toDecisionDTO,
   toFeedDTO,
   toMoneyDTO,
   toOpportunitiesDTO,
@@ -43,9 +49,14 @@ const HIDDEN_TOKENS = [
   // loan internals
   'interestRate',
   'approvalScore',
-  // opportunity internals
+  // opportunity / decision internals
   'expectedReturn',
   'riskLevel',
+  'monthlyAmount',
+  'standingAmount',
+  'standingContract',
+  'incomeMode',
+  'spotBaseIncome',
   // NPC decision internals
   'prospectUtility',
   'Utility',
@@ -101,6 +112,27 @@ describe('iceberg-leak contract (P-X1)', () => {
       }
     });
   }
+
+  it('a surfaced opportunity and its decision leak no hidden mechanics (P6.2)', () => {
+    // Put the player in the position the Eunice contract surfaces to, surface it,
+    // and assert the opportunity + decision DTOs carry no expected value, no risk
+    // label, and none of the hidden income mechanics.
+    const world = buildWorld(11, { population: 80 });
+    world.player.occupation = 'FISHING';
+    world.player.socialCapitalLocal = 0.5;
+    world.month = 3;
+    surfaceOpportunities(world);
+    expect(world.opportunities.length).toBe(1);
+
+    const opportunities = toOpportunitiesDTO(world);
+    expect(opportunities.active.length).toBe(1);
+    assertNoLeak('opportunities', opportunities);
+
+    const decision = toDecisionDTO(world, EUNICE_DECISION_ID);
+    expect(decision).not.toBeNull();
+    expect(decision!.options.length).toBeGreaterThanOrEqual(2);
+    assertNoLeak('decision', decision);
+  });
 
   it('money view exposes payment but never the loan interest rate', () => {
     // Give the player a loan and confirm the agreed monthlyPayment shows while the

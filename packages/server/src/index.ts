@@ -12,6 +12,7 @@ export {
   toFeedDTO,
   toCommunityDTO,
   toOpportunitiesDTO,
+  toDecisionDTO,
 } from './projection';
 
 // Persistence (Phase 2) — save/load against Postgres.

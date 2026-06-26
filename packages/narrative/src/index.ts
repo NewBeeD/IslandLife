@@ -38,6 +38,11 @@ export {
 export { generateNarrativeEntry } from './generate';
 export type { GenerateResult } from './generate';
 export {
+  buildDecisionSituation,
+  buildDecisionAcknowledgement,
+  generateConsequenceEntry,
+} from './decisions';
+export {
   LLM_GENERATION_TRIGGERS,
   detectTriggers,
   captureTriggerSnapshot,

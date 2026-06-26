@@ -253,6 +253,8 @@ export function buildWorld(seed: number, opts: BuildOptions = {}): WorldState {
       lastNetWorth: player.cash,
     },
     playerNotifications: [],
+    opportunities: [],
+    decisions: [],
     rng,
   };
 

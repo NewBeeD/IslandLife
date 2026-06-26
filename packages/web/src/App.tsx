@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react';
-import type { FeedEntryDTO, MoneyDTO, StateDTO } from '@island/shared';
+import type { FeedEntryDTO, MoneyDTO, OpportunitiesDTO, StateDTO } from '@island/shared';
 import { api } from './api/client';
 import { DailyLife } from './views/DailyLife';
 import { Money } from './views/Money';
+import { Opportunities } from './views/Opportunities';
 
-type View = 'daily' | 'money';
+type View = 'daily' | 'money' | 'opportunities';
 
 export function App() {
   const [saveId, setSaveId] = useState<string | null>(null);
@@ -12,14 +13,21 @@ export function App() {
   const [state, setState] = useState<StateDTO | null>(null);
   const [feed, setFeed] = useState<FeedEntryDTO[]>([]);
   const [money, setMoney] = useState<MoneyDTO | null>(null);
+  const [opportunities, setOpportunities] = useState<OpportunitiesDTO | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async (id: string) => {
-    const [s, f, m] = await Promise.all([api.state(id), api.feed(id), api.money(id)]);
+    const [s, f, m, o] = await Promise.all([
+      api.state(id),
+      api.feed(id),
+      api.money(id),
+      api.opportunities(id),
+    ]);
     setState(s);
     setFeed(f.entries);
     setMoney(m);
+    setOpportunities(o);
   }, []);
 
   const begin = useCallback(async () => {
@@ -63,6 +71,8 @@ export function App() {
     );
   }
 
+  const openCount = opportunities?.active.length ?? 0;
+
   return (
     <main className="app">
       <header className="bar">
@@ -86,11 +96,25 @@ export function App() {
         <button className={view === 'money' ? 'active' : ''} onClick={() => setView('money')}>
           Money
         </button>
+        <button
+          className={view === 'opportunities' ? 'active' : ''}
+          onClick={() => setView('opportunities')}
+        >
+          Opportunities
+          {openCount > 0 && <span className="tab__badge">{openCount}</span>}
+        </button>
       </nav>
 
       <section className="content">
         {view === 'daily' && <DailyLife entries={feed} />}
         {view === 'money' && money && <Money money={money} />}
+        {view === 'opportunities' && opportunities && (
+          <Opportunities
+            saveId={saveId}
+            opportunities={opportunities}
+            onResolved={() => refresh(saveId)}
+          />
+        )}
       </section>
 
       {error && <p className="error">{error}</p>}

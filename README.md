@@ -5,7 +5,7 @@ documents in this repo (`island_life_*.md`) specify the game; this codebase
 implements it, starting from the engine.
 
 See `island_life_technical_architecture.md` for the full stack, schema, API, and
-build sequence. This README covers what is **built so far** (Phases 0–4).
+build sequence. This README covers what is **built so far** (Phases 0–6).
 
 ## Status
 
@@ -16,8 +16,8 @@ build sequence. This README covers what is **built so far** (Phases 0–4).
 | 2 | Postgres persistence (schema, save/load, projection read model) | ✅ done |
 | 3 | Character creation → agent #1 | ✅ done |
 | 4 | Fastify API + iceberg projection + template narrative + React/Vite client | ✅ done |
-| 5 | Narrative LLM (Claude Opus 4.8) | ⬜ next |
-| 6 | One decision loop → **vertical slice** | ⬜ |
+| 5 | Narrative LLM (Claude Opus 4.8) | ✅ done |
+| 6 | One decision loop → **vertical slice** | ✅ done |
 
 ## Quick start
 
@@ -67,9 +67,18 @@ npm run db:apicheck        # end-to-end: begin a life, advance, assert month++ i
 Open http://localhost:5173, **Begin a life**, and **Advance to next month** — the
 Daily Life feed fills with template prose and the Money view tracks your cash.
 Routes: `POST /saves`, `GET /saves/:id/{state,money,feed,community,opportunities}`,
-`POST /saves/:id/advance`. The single most important test is the **iceberg-leak
-contract** (`packages/server/src/__tests__/iceberg.test.ts`): every DTO is snapshot
-and asserted to contain no hidden key.
+`GET|POST /saves/:id/decisions/:did`, `POST /saves/:id/advance`. The single most
+important test is the **iceberg-leak contract**
+(`packages/server/src/__tests__/iceberg.test.ts`): every DTO is snapshot and asserted
+to contain no hidden key.
+
+The **Phase 6 vertical slice**: play a fishing life and, once you are known enough
+around the market, **Eunice's standing supply contract** surfaces in the
+Opportunities view. The decision is unlabelled — a steady monthly arrangement vs.
+the freedom of selling at the wharf — and your choice changes how your income
+behaves from then on. Months later a **Memory** entry surfaces in the feed that
+connects back to the choice without naming it. The whole loop is verified offline by
+`packages/narrative/src/__tests__/slice.test.ts`.
 
 ## Layout
 
@@ -113,10 +122,10 @@ out so the engine's current behaviour reads honestly:
   cash still drifts up over decades. A real consumption/savings model comes later.
 - **Simplified NPC decisions.** The full prospect-theory engine (Kahneman &
   Tversky) from the design doc is stubbed to seek-work / hold for now.
-- **Bespoke (LLM) narrative** is Phase 5 — Phase 4 ships the Layer-1 template
-  engine only; significant events still read as templates until Claude is wired in.
-- **Opportunities, decisions, and the delayed-consequence loop** are Phase 6; the
-  `opportunities` route returns empty until the information-channel filter lands.
+- **Single decision, single channel.** Phase 6 ships one genuine decision (Eunice's
+  standing supply contract) surfaced through the MARKET_NETWORK information channel.
+  The full channel catalogue, negotiation sub-interface, and the wider opportunity
+  set are later work; the loop — surface → choose → consequence — is proven end to end.
 
 ## Determinism
 

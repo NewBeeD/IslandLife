@@ -7,7 +7,9 @@ import type {
   LegacyScore,
   Market,
   NPCAgent,
+  Opportunity,
   Parish,
+  PlayerDecision,
   RngState,
   WorldEvent,
   WorldState,
@@ -44,6 +46,8 @@ export interface SerializedWorld {
   events: WorldEvent[];
   playerLegacy: LegacyScore;
   playerNotifications: string[];
+  opportunities: Opportunity[];
+  decisions: PlayerDecision[];
 }
 
 const clone = <T>(x: T): T => structuredClone(x);
@@ -75,6 +79,8 @@ export function serializeWorld(world: WorldState): SerializedWorld {
     events: clone(world.events),
     playerLegacy: clone(world.playerLegacy),
     playerNotifications: clone(world.playerNotifications),
+    opportunities: clone(world.opportunities),
+    decisions: clone(world.decisions),
   };
 }
 
@@ -122,6 +128,9 @@ export function deserializeWorld(s: SerializedWorld): WorldState {
     events: clone(s.events),
     playerLegacy: clone(s.playerLegacy),
     playerNotifications: clone(s.playerNotifications),
+    // Default for snapshots written before Phase 6 added these fields.
+    opportunities: s.opportunities ? clone(s.opportunities) : [],
+    decisions: s.decisions ? clone(s.decisions) : [],
     rng: createRng(s.seed, s.rngState),
   };
 }

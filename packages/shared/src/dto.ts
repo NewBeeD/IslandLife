@@ -89,12 +89,42 @@ export interface OpportunityDTO {
   source: string; // "Heard: directly from Eunice"
   window: string; // "She needs an answer this month"
   status: 'OPEN' | 'POSSIBLE' | 'EXPIRED';
+  // The decision to open when the player acts on an OPEN opportunity. Null once the
+  // opportunity is resolved (no further choice to make).
+  decisionId: string | null;
 }
 
 export interface OpportunitiesDTO {
   active: OpportunityDTO[];
   possible: OpportunityDTO[];
   expired: OpportunityDTO[];
+}
+
+// GET /saves/:id/decisions/:did — the decision interface. Situation as a narrative
+// moment, options as unlabelled prose. No expectedReturn, no riskLevel, no "safe"
+// or "risky" labels — the player must think (Player Experience doc).
+export interface DecisionOptionDTO {
+  id: string;
+  label: string; // the action, e.g. "Tell Eunice yes — you'll supply her"
+  description: string; // what it means, in prose; no value/probability/risk label
+}
+
+export interface DecisionDTO {
+  id: string;
+  title: string; // "Eunice's offer"
+  situation: string; // the narrative framing of the choice
+  options: DecisionOptionDTO[];
+  status: 'OPEN' | 'RESOLVED' | 'EXPIRED';
+  window: string; // "She needs an answer this month"
+  chosenOptionId: string | null;
+}
+
+// POST /saves/:id/decisions/:did — the resolution. Confirms the choice and carries
+// a short in-voice line acknowledging it. No mechanics, no outcome forecast.
+export interface DecisionResultDTO {
+  decisionId: string;
+  chosenOptionId: string;
+  acknowledgement: string;
 }
 
 // POST /saves/:id/advance — the month-transition response. Carries the blurb and

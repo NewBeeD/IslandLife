@@ -6,11 +6,11 @@ of work with an acceptance test, the files it touches, and its dependencies.
 
 - **Design source of truth:** the five `island_life_*.md` docs.
 - **Build sequence:** `island_life_technical_architecture.md` → "Build Sequence".
-- **Current state:** Phases 0–5 complete (scaffold, headless engine, persistence,
+- **Current state:** Phases 0–6 complete (scaffold, headless engine, persistence,
   character creation, the Fastify API + iceberg projection + template narrative
-  + React/Vite client, and the Layer-2 Claude Opus 4.8 narrative — cached system
-  prompt, context assembler, async worker, prefetch). Next: Phase 6 (the vertical
-  slice — one unlabelled decision loop with a delayed consequence).
+  + React/Vite client, the Layer-2 Claude Opus 4.8 narrative, and the vertical
+  slice — one unlabelled decision loop with a delayed consequence). Next: the
+  post-slice backlog (P-B1 firm formation onward).
 
 ## How to read this
 
@@ -236,31 +236,47 @@ These are the guardrails I follow on every change; they're not steps, they're co
 
 ---
 
-## Phase 6 — One decision loop → THE VERTICAL SLICE
+## Phase 6 — One decision loop → THE VERTICAL SLICE ✅ DONE
 
 > Goal: a real, unlabelled decision with a delayed consequence, end to end.
 
-- **P6.1 — Opportunity surfacing.** Implement the information-channel filter
-  (Player Experience doc) so Eunice's standing supply-contract opportunity surfaces
-  to a fishing player with enough local social capital. *Acceptance:* it appears in
-  `GET /opportunities` for the right player and not for others.
+- **P6.1 — Opportunity surfacing.** ✅ `packages/engine/src/opportunities.ts` —
+  `surfaceOpportunities(world)` is the information-channel filter (MARKET_NETWORK,
+  local social capital ≥ 0.30, a fishing player, a few months in). It pushes
+  Eunice's standing supply contract + its decision onto `world.opportunities` /
+  `world.decisions` (serialized with the snapshot), and expires unanswered offers.
+  `toOpportunitiesDTO` projects the OPEN/expired ones; the hidden `monthlyAmount`
+  becomes prose, never a field. *Acceptance:* ✅ it appears in `GET /opportunities`
+  for the fishing player with local capital and not for a non-fisher / low-capital
+  player (engine `opportunities.test.ts`).
 
-- **P6.2 — Decision generation.** `generateDecisionInterface` produces situation +
-  unlabelled options (no "safe/risky"). *Acceptance:* `GET /decisions/:id` returns
-  2–4 genuine options; the iceberg test confirms no expected-value leak.
+- **P6.2 — Decision generation.** ✅ The engine builds the unlabelled options (no
+  "safe/risky"); `buildDecisionSituation` (narrative) frames the moment in voice;
+  `toDecisionDTO` emits `{id,label,description}` only. *Acceptance:* ✅
+  `GET /decisions/:id` returns 2 genuine options (standing arrangement vs. the
+  wharf); the iceberg test surfaces the offer and asserts no `expectedReturn`,
+  `riskLevel`, `monthlyAmount`, or income-mode mechanics leak.
 
-- **P6.3 — Resolve into the simulation.** `POST /decisions/:id` feeds the choice
-  back into the player's economic state (a standing income vs. spot-selling
-  trade-off). *Acceptance:* the choice changes subsequent months' income behaviour.
+- **P6.3 — Resolve into the simulation.** ✅ `resolveDecision` records the choice
+  and sets the player's `incomeMode`; `updatePlayerIncome` (called by `advance`
+  before `simulateOneMonth`) makes STANDING a fixed contract amount and SPOT
+  market-variable from the local fish price. `POST /decisions/:id` persists it.
+  Gated behind a flag that is unset for the default player, so the golden master
+  digest is untouched. *Acceptance:* ✅ accept holds income steady while decline
+  tracks the market — subsequent months' income behaviour diverges.
 
-- **P6.4 — Delayed consequence.** Months later, `generateConsequenceEntry` surfaces
-  a `MEMORY` entry that connects without naming the choice. *Acceptance:* the entry
-  appears on schedule and passes the validator.
+- **P6.4 — Delayed consequence.** ✅ `resolveDecision` schedules
+  `consequenceMonth = resolvedMonth + 6`; `detectDueConsequences` fires it once;
+  `generateConsequenceEntry` (narrative) renders a `MEMORY` entry that connects to
+  the path taken or not taken without naming it a decision. *Acceptance:* ✅ it
+  appears on schedule and passes the voice validator for both choices.
 
-- **P6.5 — Slice acceptance.** One fishing life in Saint John, ~24 months, real
-  prices + a hurricane season, template + Opus feed, the Money view, the Eunice
-  decision with a later consequence, legacy accruing hidden. *Acceptance: the
-  vertical slice is playable in the browser.*
+- **P6.5 — Slice acceptance.** ✅ The Opportunities view + decision interface wire
+  the loop into the React client (`build:web` clean). The whole life — surface →
+  choose → changed income → delayed consequence, every entry voice-validated — is
+  proven offline by `packages/narrative/src/__tests__/slice.test.ts` (one fishing
+  life in Saint John, replaying the exact `advance` sequence). *Acceptance:* ✅ the
+  vertical slice is playable in the browser (`serve` + `dev:web` against Postgres).
 
 ---
 

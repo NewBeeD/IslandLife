@@ -174,6 +174,18 @@ export interface NPCAgent {
   businessesStarted: { industry: Industry; wasFirstInIndustryInParish: boolean }[];
   keptPromises: number;
   brokenContracts: number;
+
+  // How the player's self-employed income is earned, set when a decision resolves
+  // (Phase 6). Undefined for NPCs and for the player before any decision: income is
+  // the static `monthlyIncome` (the pre-P6 behaviour, so the golden master holds).
+  // STANDING — a guaranteed contract amount each month (stable). SPOT — market-driven
+  // and variable, computed from the local price each month.
+  incomeMode?: 'SPOT' | 'STANDING';
+  // The accepted standing contract (STANDING mode only). Never crosses the wire.
+  standingContract?: { opportunityId: string; monthlyAmount: number } | null;
+  // The income level spot-selling reverts to as a base (SPOT mode), captured when
+  // the player chose to keep selling on the open market.
+  spotBaseIncome?: number;
 }
 
 export interface ActivePolicy {
@@ -214,6 +226,54 @@ export interface LegacyScore {
   lastNetWorth: number;
 }
 
+// ── Opportunities & decisions (Phase 6) ──────────────────────────────────────
+// Hidden engine state. An Opportunity is something the world has surfaced to the
+// player through their information channels (Player Experience doc); a
+// PlayerDecision is the unlabelled choice it presents. The projection layer emits
+// only prose + neutral option text — `monthlyAmount`, `expectedReturn`, and the
+// option `effect` never cross the wire (S3, the iceberg).
+
+export type OpportunityKind = 'EUNICE_SUPPLY_CONTRACT';
+export type OpportunityStatus = 'OPEN' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
+
+export interface Opportunity {
+  id: string;
+  kind: OpportunityKind;
+  industry: Industry;
+  npcName: string; // "Eunice Charles" — the person behind the offer
+  channelId: string; // the information channel that surfaced it (MARKET_NETWORK)
+  surfacedMonth: number;
+  windowMonths: number; // months the offer stays open before it expires
+  status: OpportunityStatus;
+  decisionId: string; // the PlayerDecision presenting this opportunity
+  // Hidden mechanics — never projected raw.
+  monthlyAmount: number; // EC$ the standing arrangement guarantees
+}
+
+// One unlabelled option. `label`/`description` are neutral player-facing prose (no
+// "safe"/"risky"); `effect` is the hidden mechanical resolution.
+export interface DecisionOption {
+  id: string;
+  label: string;
+  description: string;
+  effect: { incomeMode: 'SPOT' | 'STANDING'; standingAmount?: number };
+}
+
+export interface PlayerDecision {
+  id: string;
+  opportunityId: string;
+  kind: OpportunityKind;
+  surfacedMonth: number;
+  windowMonths: number;
+  options: DecisionOption[];
+  chosenOptionId: string | null;
+  resolvedMonth: number | null;
+  // When the delayed consequence is due (resolvedMonth + lag), and whether the
+  // MEMORY entry connecting back to it has already surfaced (P6.4).
+  consequenceMonth: number | null;
+  consequenceDelivered: boolean;
+}
+
 // The in-memory entity graph. One per save. Mutated in place by simulateOneMonth.
 export interface WorldState {
   seed: number;
@@ -230,6 +290,9 @@ export interface WorldState {
   events: WorldEvent[];
   playerLegacy: LegacyScore;
   playerNotifications: string[];
+  // Opportunities surfaced to the player and the decisions they present (Phase 6).
+  opportunities: Opportunity[];
+  decisions: PlayerDecision[];
   // Seeded PRNG is attached at runtime by the engine (not serialized here).
   rng: RNG;
 }

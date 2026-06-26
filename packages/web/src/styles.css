@@ -181,6 +181,89 @@ button:disabled {
   line-height: 1.5;
 }
 
+/* Opportunities + the decision interface */
+.tab__badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  min-width: 1.2rem;
+  padding: 0 0.35rem;
+  border-radius: 0.7rem;
+  background: var(--sea);
+  color: #fff;
+  font-size: 0.72rem;
+  text-align: center;
+  line-height: 1.2rem;
+}
+.opps__group {
+  margin-bottom: 1.8rem;
+}
+.opps__group h3 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.3rem;
+}
+.opps__group--expired {
+  opacity: 0.7;
+}
+.opp {
+  padding: 0.8rem 0 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.opp__title {
+  margin: 0.3rem 0;
+  font-size: 1.1rem;
+}
+.opp__desc {
+  margin: 0.2rem 0;
+  line-height: 1.55;
+}
+.opp__meta {
+  font-size: 0.85rem;
+  margin: 0.2rem 0 0.7rem;
+}
+.decision {
+  margin-top: 0.8rem;
+  padding: 1rem;
+  border-left: 3px solid var(--sea);
+  background: rgba(31, 93, 107, 0.05);
+}
+.decision__situation {
+  margin: 0 0 1rem;
+  line-height: 1.65;
+  white-space: pre-line;
+}
+.decision__options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.decision__option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: left;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+.decision__option:hover:not(:disabled) {
+  border-color: var(--sea);
+}
+.decision__back {
+  margin-top: 0.7rem;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 0.2rem 0;
+}
+
 /* Advance */
 .advance {
   position: fixed;
