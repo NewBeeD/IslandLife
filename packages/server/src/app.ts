@@ -72,11 +72,12 @@ async function loadOr404(
   }
 }
 
-// Choose the narrative worker. Layer-2 (Claude) generation only runs when an
-// ANTHROPIC_API_KEY is configured — otherwise the app stays Layer-1 (template)
-// only, so the headless gate and template-only local runs never reach the network.
+// Choose the narrative worker. Layer-2 generation only runs when a provider key is
+// configured — DEEPSEEK_API_KEY (cheap) or ANTHROPIC_API_KEY. Otherwise the app
+// stays Layer-1 (template) only, so the headless gate and template-only local runs
+// never reach the network.
 function defaultNarrativeWorker(): NarrativeWorker {
-  if (!process.env.ANTHROPIC_API_KEY) return NOOP_NARRATIVE_WORKER;
+  if (!process.env.DEEPSEEK_API_KEY && !process.env.ANTHROPIC_API_KEY) return NOOP_NARRATIVE_WORKER;
   return createNarrativeWorker({
     generate: (trigger, world) => generateNarrativeEntry(trigger, world),
     persist: appendNarrativeEntries,

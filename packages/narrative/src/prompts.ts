@@ -15,6 +15,7 @@ import {
   type NarrativeContext,
 } from './narrativeContext';
 import { getVoiceAgeModifier, PARISH_VOICE_CONTEXT, SEASONAL_VOICE_NOTES } from './voice';
+import { LONG_FORM_TRIGGERS } from './validate';
 import type { Industry } from '@island/shared';
 import type { LLMTrigger } from './triggers';
 
@@ -57,7 +58,17 @@ function industryLabel(value: unknown): string {
 
 // Build the trigger-specific user turn. The system prompt (the cached voice rules
 // + world primer) is passed separately to callClaude; this is only the user turn.
+// For non-long-form triggers, a hard word limit is appended last — the most salient
+// position for instruction-following, and uncached so it never perturbs the prompt
+// cache. The cap matches the validator's 400-word gate (validate.ts); long-form
+// triggers are exempt, exactly as the validator exempts them.
 export function buildUserPrompt(trigger: LLMTrigger, ctx: NarrativeContext): string {
+  const prompt = buildTriggerUserPrompt(trigger, ctx);
+  if (LONG_FORM_TRIGGERS.includes(trigger.id)) return prompt;
+  return prompt + '\n\nKeep this entry under 400 words.';
+}
+
+function buildTriggerUserPrompt(trigger: LLMTrigger, ctx: NarrativeContext): string {
   const base = buildBase(ctx);
 
   switch (trigger.id) {

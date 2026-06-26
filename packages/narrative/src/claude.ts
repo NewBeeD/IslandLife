@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { createDeepSeekClient } from './deepseek';
 
 // Layer 2 of the narrative system: bespoke prose from Claude for significant
 // events. This module owns the single point of contact with the Anthropic API.
@@ -16,6 +17,12 @@ export const NARRATIVE_MODEL = 'claude-opus-4-8';
 // deliberately long-form (voice rule 7). Routine significant events use far less.
 export const NARRATIVE_MAX_TOKENS = 1500;
 
+// Cap for non-long-form entries, which the validator holds to 400 words. ~600
+// tokens covers 400 English words (~0.67 words/token) with headroom, so the
+// physical ceiling can't exceed the validator's word gate — defense in depth
+// against a provider (e.g. DeepSeek) that runs long for the same instruction.
+export const NARRATIVE_MAX_TOKENS_SHORT = 600;
+
 // The minimal slice of the SDK that callClaude needs. Declaring it structurally
 // lets tests inject a fake client without standing up the real SDK or a network —
 // the real `Anthropic` instance satisfies it.
@@ -26,12 +33,16 @@ export interface ClaudeClient {
 }
 
 // One client per process, created lazily so importing this module never requires
-// ANTHROPIC_API_KEY (tests and the headless gate don't have one). The SDK reads
-// ANTHROPIC_API_KEY from the environment and sets authentication + the
-// anthropic-version header automatically.
+// an API key (tests and the headless gate don't have one). Provider is chosen by
+// which key is present: DeepSeek (cheap) when DEEPSEEK_API_KEY is set, otherwise
+// the Anthropic SDK (reads ANTHROPIC_API_KEY + sets the version header itself).
+// Both speak the same structural ClaudeClient interface, so callClaude is blind to
+// the choice.
 let defaultClient: ClaudeClient | null = null;
 function getDefaultClient(): ClaudeClient {
-  if (!defaultClient) defaultClient = new Anthropic();
+  if (!defaultClient) {
+    defaultClient = process.env.DEEPSEEK_API_KEY ? createDeepSeekClient() : new Anthropic();
+  }
   return defaultClient;
 }
 
@@ -55,10 +66,11 @@ export async function callClaude(
   systemPrompt: string,
   userPrompt: string,
   client: ClaudeClient = getDefaultClient(),
+  maxTokens: number = NARRATIVE_MAX_TOKENS,
 ): Promise<ClaudeResult> {
   const message = await client.messages.create({
     model: NARRATIVE_MODEL,
-    max_tokens: NARRATIVE_MAX_TOKENS,
+    max_tokens: maxTokens,
     system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: userPrompt }],
   });

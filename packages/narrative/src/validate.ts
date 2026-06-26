@@ -9,7 +9,10 @@ export interface ValidationResult {
   text: string;
 }
 
-const LONG_FORM_TRIGGERS = ['ANNUAL_REFLECTION', 'DECADE_MILESTONE', 'DEATH_AND_LEGACY'];
+// Triggers exempt from the 400-word cap — deliberately long-form (voice rule 7).
+// Exported so the per-call token budget (claude.ts) stays in lockstep with the
+// validator: one source of truth for what counts as long-form.
+export const LONG_FORM_TRIGGERS = ['ANNUAL_REFLECTION', 'DECADE_MILESTONE', 'DEATH_AND_LEGACY'];
 
 const FORBIDDEN_PATTERNS: RegExp[] = [
   // Game mechanics exposed

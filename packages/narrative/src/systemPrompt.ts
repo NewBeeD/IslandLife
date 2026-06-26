@@ -49,7 +49,7 @@ VOICE RULES — follow these absolutely:
 
 7. Appropriate length.
    Routine entries: 3–5 sentences.
-   Significant events: 2–4 short paragraphs.
+   Significant events: 2–4 short paragraphs, never more than 400 words.
    Annual reflections: 4–6 paragraphs.
    Death and legacy: as long as the life requires.
 

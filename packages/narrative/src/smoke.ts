@@ -1,8 +1,10 @@
 // P5.1 acceptance — a live smoke test. Generates a real Layer-2 entry twice and
 // confirms the system prompt is served from the prompt cache on the second call
-// (`usage.cache_read_input_tokens` > 0). Requires ANTHROPIC_API_KEY; NOT part of
-// `npm test` (the headless gate stays offline). Run with:
+// (`usage.cache_read_input_tokens` > 0). Provider-agnostic: runs against whichever
+// key is set — DeepSeek (cheap) or Anthropic. NOT part of `npm test` (the headless
+// gate stays offline). Run with:
 //
+//   DEEPSEEK_API_KEY=…  npm run narrative:smoke
 //   ANTHROPIC_API_KEY=… npm run narrative:smoke
 //
 import { buildWorld, simulateOneMonth } from '@island/engine';
@@ -10,10 +12,16 @@ import { generateNarrativeEntry } from './generate';
 import type { LLMTrigger } from './triggers';
 
 async function main(): Promise<void> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('ANTHROPIC_API_KEY is not set — cannot run the live smoke test.');
+  const provider = process.env.DEEPSEEK_API_KEY
+    ? 'DeepSeek'
+    : process.env.ANTHROPIC_API_KEY
+      ? 'Anthropic'
+      : null;
+  if (!provider) {
+    console.error('No provider key set (DEEPSEEK_API_KEY or ANTHROPIC_API_KEY) — cannot run the live smoke test.');
     process.exit(1);
   }
+  console.log(`provider: ${provider}`);
 
   const world = buildWorld(42, { population: 200 });
   for (let m = 0; m < 6; m++) simulateOneMonth(world);

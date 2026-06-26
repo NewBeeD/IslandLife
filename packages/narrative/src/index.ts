@@ -21,6 +21,12 @@ export {
   NARRATIVE_MAX_TOKENS,
 } from './claude';
 export type { ClaudeClient, ClaudeResult } from './claude';
+export {
+  createDeepSeekClient,
+  DEEPSEEK_DEFAULT_MODEL,
+  DEEPSEEK_DEFAULT_BASE_URL,
+} from './deepseek';
+export type { DeepSeekOptions } from './deepseek';
 export { buildSystemPrompt } from './systemPrompt';
 export { buildUserPrompt } from './prompts';
 export {

@@ -1,10 +1,15 @@
 import type { NarrativeEntry, WorldState } from '@island/shared';
 import type Anthropic from '@anthropic-ai/sdk';
-import { callClaude, type ClaudeClient } from './claude';
+import {
+  callClaude,
+  NARRATIVE_MAX_TOKENS,
+  NARRATIVE_MAX_TOKENS_SHORT,
+  type ClaudeClient,
+} from './claude';
 import { assembleNarrativeContext } from './narrativeContext';
 import { buildUserPrompt } from './prompts';
 import { buildSystemPrompt } from './systemPrompt';
-import { validateNarrativeEntry } from './validate';
+import { LONG_FORM_TRIGGERS, validateNarrativeEntry } from './validate';
 import type { LLMTrigger } from './triggers';
 
 export interface GenerateResult {
@@ -34,11 +39,18 @@ export async function generateNarrativeEntry(
   const user = buildUserPrompt(trigger, ctx);
   const month = world.month;
 
+  // Long-form triggers (annual/legacy) are exempt from the 400-word gate and get
+  // the full budget; everything else is capped so the output can't physically
+  // exceed the validator's word limit.
+  const maxTokens = LONG_FORM_TRIGGERS.includes(trigger.id)
+    ? NARRATIVE_MAX_TOKENS
+    : NARRATIVE_MAX_TOKENS_SHORT;
+
   let lastUsage: Anthropic.Usage | null = null;
   let lastIssues: string[] = [];
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const { text, usage } = await callClaude(system, user, client);
+    const { text, usage } = await callClaude(system, user, client, maxTokens);
     lastUsage = usage;
     const result = validateNarrativeEntry(text, trigger.id);
     if (result.valid) {

@@ -24,9 +24,12 @@ async function get<T>(path: string): Promise<T> {
 }
 
 async function post<T>(path: string, body?: unknown): Promise<T> {
+  // Only send a JSON content-type when there's actually a body. A bodyless POST
+  // (e.g. /advance) with content-type: application/json trips Fastify's
+  // FST_ERR_CTP_EMPTY_JSON_BODY (400).
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`POST ${path} -> ${res.status}`);
