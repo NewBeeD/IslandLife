@@ -50,8 +50,12 @@ describe('the vertical slice — one fishing life, end to end (P6.5)', () => {
         expect(r.valid, `month ${e.month} ${e.triggerId}: ${r.issues.join('; ')}`).toBe(true);
       }
 
-      // The first time the offer is open, take it (the player acts between months).
-      const offer = world.opportunities.find((o) => o.status === 'OPEN');
+      // The first time Eunice's offer is open, take it (the player acts between
+      // months). Other opportunities (e.g. an education enrolment, Phase 9) may also
+      // be open — the slice is specifically the Eunice contract loop.
+      const offer = world.opportunities.find(
+        (o) => o.status === 'OPEN' && o.kind === 'EUNICE_SUPPLY_CONTRACT',
+      );
       if (offer && resolvedMonth === null) {
         const decision = resolveDecision(world, EUNICE_DECISION_ID, EUNICE_OPTION_ACCEPT);
         resolvedMonth = decision.resolvedMonth;

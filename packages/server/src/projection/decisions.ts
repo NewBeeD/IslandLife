@@ -28,6 +28,7 @@ function titleFor(decision: PlayerDecision, opp: Opportunity | undefined): strin
     return `${opp?.npcName ?? 'Eunice'}'s offer`;
   }
   if (decision.kind === 'ASSET_UPGRADE') return 'A bigger step';
+  if (decision.kind === 'EDUCATION_ENROLMENT') return opp?.enrolment ? `Study — ${opp.enrolment.name}` : 'Going back to study';
   return 'A decision';
 }
 

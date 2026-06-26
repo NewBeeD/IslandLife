@@ -53,6 +53,11 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
   } else if (operatingCosts >= 1) {
     expenseLines.push({ label: 'Fuel and upkeep', amount: Math.round(operatingCosts) });
   }
+  // Tuition while enrolled (Phase 9) — a real monthly line until the program ends.
+  const enrolled = p.education?.enrolled;
+  if (enrolled && enrolled.monthsRemaining > 0) {
+    expenseLines.push({ label: 'Tuition', amount: Math.round(enrolled.monthlyCost) });
+  }
   for (const l of activeLoans) {
     expenseLines.push({ label: `Loan repayment (${bankLabel(l.bankId)})`, amount: Math.round(l.monthlyPayment) });
   }

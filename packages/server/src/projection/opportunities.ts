@@ -11,6 +11,7 @@ import type { Opportunity, OpportunitiesDTO, OpportunityDTO, WorldState } from '
 function titleFor(opp: Opportunity): string {
   if (opp.kind === 'EUNICE_SUPPLY_CONTRACT') return `Supply contract — ${opp.npcName}`;
   if (opp.kind === 'ASSET_UPGRADE' && opp.upgrade) return `A bigger step — ${opp.upgrade.assetLabel}`;
+  if (opp.kind === 'EDUCATION_ENROLMENT' && opp.enrolment) return `Go back to study — ${opp.enrolment.name}`;
   return opp.npcName;
 }
 
@@ -33,11 +34,23 @@ function descriptionFor(opp: Opportunity): string {
       `You would put down what you can and borrow the rest.`
     );
   }
+  if (opp.kind === 'EDUCATION_ENROLMENT' && opp.enrolment) {
+    // The cost and length are public (you know what a program asks); what it will do
+    // for you stays unstated — no promised return, just the trade-off in prose.
+    const prog = opp.enrolment;
+    const monthly = Math.round(prog.totalCost / prog.durationMonths);
+    return (
+      `${capitalise(prog.name)} — ${formatCurrency(prog.totalCost)} over ${prog.durationMonths} ` +
+      `months, about ${formatCurrency(monthly)} a month while you study, with nothing in hand ` +
+      `until you finish. A qualification opens doors that stay shut to a person without it.`
+    );
+  }
   return 'An arrangement put to you.';
 }
 
 function sourceFor(opp: Opportunity): string {
   if (opp.kind === 'ASSET_UPGRADE') return `Word: through ${opp.npcName}.`;
+  if (opp.kind === 'EDUCATION_ENROLMENT') return 'Notice: the community college intake.';
   return `Heard: directly from ${opp.npcName}.`;
 }
 
@@ -45,6 +58,9 @@ function windowFor(opp: Opportunity, world: WorldState): string {
   const monthsLeft = opp.surfacedMonth + opp.windowMonths - world.month;
   if (opp.kind === 'ASSET_UPGRADE') {
     return monthsLeft <= 1 ? 'The offer holds only this month.' : 'It is there for now, but not forever.';
+  }
+  if (opp.kind === 'EDUCATION_ENROLMENT') {
+    return monthsLeft <= 1 ? 'The intake closes this month.' : 'The intake is open for now.';
   }
   if (monthsLeft <= 1) return 'She needs an answer this month.';
   return 'She is waiting on your word, but not forever.';

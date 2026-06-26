@@ -3,6 +3,7 @@ import {
   DecisionError,
   applyUpgradeFinancing,
   detectDueConsequences,
+  detectEducationCompletions,
   quoteUpgradeFinancing,
   resolveDecision,
   simulateOneMonth,
@@ -15,6 +16,7 @@ import {
   captureTriggerSnapshot,
   detectTriggers,
   generateConsequenceEntry,
+  generateEducationCompletionEntry,
   generateMonthlyEntries,
   generateNarrativeEntry,
 } from '@island/narrative';
@@ -274,6 +276,13 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
       generateConsequenceEntry(world, d),
     );
     entries.push(...consequences);
+
+    // Finalize any education program that completed this month (Phase 9): the engine
+    // applies the knowledge gain + credential, and we render a completion MEMORY.
+    const completions: NarrativeEntry[] = detectEducationCompletions(world).map((prog) =>
+      generateEducationCompletionEntry(world, prog),
+    );
+    entries.push(...completions);
 
     await saveTick(req.params.id, world);
     await saveNarrativeEntries(req.params.id, world.month, entries);

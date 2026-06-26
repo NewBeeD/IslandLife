@@ -48,6 +48,22 @@ export type FamilyBackground =
 
 export type FormativeEvent = 'HURRICANE' | 'DIASPORA_REMITTANCE' | 'EXPLOITATION' | 'MENTOR';
 
+// Education credentials (Phase 9), in ascending order. A credential is earned by
+// enrolling in and completing a program; higher credentials unlock gated
+// opportunities. CREDENTIAL_ORDER gives each level a comparable rank.
+export type CredentialLevel = 'NONE' | 'CERTIFICATE' | 'ASSOCIATE' | 'DEGREE' | 'MASTERS';
+export const CREDENTIAL_ORDER: readonly CredentialLevel[] = [
+  'NONE',
+  'CERTIFICATE',
+  'ASSOCIATE',
+  'DEGREE',
+  'MASTERS',
+] as const;
+// The numeric rank of a credential (its index in CREDENTIAL_ORDER), for gate checks.
+export function credentialRank(level: CredentialLevel): number {
+  return CREDENTIAL_ORDER.indexOf(level);
+}
+
 // Maps an Industry to its knowledge/experience domain key. The two namespaces
 // differ in case and spelling ('FISHING' vs 'fishing'); always map before
 // indexing a domain object, or you get undefined -> NaN.

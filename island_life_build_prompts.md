@@ -6,16 +6,17 @@ of work with an acceptance test, the files it touches, and its dependencies.
 
 - **Design source of truth:** the five `island_life_*.md` docs.
 - **Build sequence:** `island_life_technical_architecture.md` → "Build Sequence".
-- **Current state:** Phases 0–8 complete (scaffold, headless engine, persistence,
+- **Current state:** Phases 0–9 complete (scaffold, headless engine, persistence,
   character creation, the Fastify API + iceberg projection + template narrative
   + React/Vite client, the Layer-2 Claude Opus 4.8 narrative, the vertical
   slice — one unlabelled decision loop with a delayed consequence, the grounded
   livelihoods + generative opportunity + bank financing + real money view of
-  Phase 7, and the Phase 8 venture portfolio — concurrent income streams that sum
-  each month). **Next (Phases 9–11) — the diversified economy:** education &
-  credentials, cross-domain opportunities + saturating side hustles, and
-  equity/crowdfunding/NPC partnerships. Then the post-slice backlog (P-B1 firm
-  formation onward).
+  Phase 7, the Phase 8 venture portfolio — concurrent income streams that sum each
+  month, and Phase 9 education & credentials — programs that drain tuition over
+  months, raise knowledge, and unlock credential-gated opportunities). **Next
+  (Phases 10–11) — the diversified economy:** cross-domain opportunities +
+  saturating side hustles, and equity/crowdfunding/NPC partnerships. Then the
+  post-slice backlog (P-B1 firm formation onward).
 
 ## How to read this
 
@@ -451,7 +452,7 @@ These are the guardrails I follow on every change; they're not steps, they're co
 
 ---
 
-## Phase 9 — Education & credentials 🔜 PLANNED
+## Phase 9 — Education & credentials ✅ DONE
 
 > Goal: the player can invest **money + time** in education (certificate →
 > associate → degree → master's), which raises knowledge / cultural capital and
@@ -499,9 +500,21 @@ These are the guardrails I follow on every change; they're not steps, they're co
   `web/views/{Money,Opportunities}.tsx`. *Acceptance:* the tuition line shows while
   enrolled; the enrol and completion prose pass the voice validator.
 
-- *Phase acceptance:* a lecturer pays for a master's over its duration, cash dips
-  each month, and on completion a credential-gated venture opportunity opens that
-  was previously hidden; iceberg clean; digest updated with a note.
+- *Phase acceptance:* ✅ `typecheck` + `typecheck:web` + `npm test` green (113
+  tests; +10 for Phase 9). A player enrols and pays tuition each month (a real cash
+  drain vs. a declined baseline), and on completion the credential advances,
+  knowledge + cultural capital rise, and a credential-gated upgrade (the commercial
+  longliner, `UPG_FISH_3`, gated on an associate) that was hidden now surfaces;
+  iceberg clean; the no-education determinism digest is **unchanged** (education is
+  additive and `surfaceEducation` is deterministic — never draws `world.rng` — so
+  existing replays are byte-compatible). New `engine/education.ts` (`CredentialLevel`
+  + `Education`/`EducationProgram`/`EnrolledProgram`; `surfaceEducation`,
+  `enrolPlayer`, `chargeTuition`, `detectEducationCompletions`, `credentialLevelOf`);
+  enrolment is an OPTIONS decision resolved through `resolveDecision`; tuition in
+  `simulateOneMonth` phase 5; a `minCredential` gate on the upgrade ladder; enrol
+  framing + completion `MEMORY` in `narrative/decisions.ts`; a tuition line on the
+  Money view; 7 tests in `education.test.ts` + 3 in `decisions.test.ts`. The slice
+  test now targets the Eunice opportunity by kind (education may also be open).
 
 ---
 

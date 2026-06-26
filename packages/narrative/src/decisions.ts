@@ -1,5 +1,11 @@
 import { PARISHES } from '@island/shared';
-import type { NarrativeEntry, Opportunity, PlayerDecision, WorldState } from '@island/shared';
+import type {
+  EnrolledProgram,
+  NarrativeEntry,
+  Opportunity,
+  PlayerDecision,
+  WorldState,
+} from '@island/shared';
 import { formatCurrency } from './magnitude';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -35,6 +41,7 @@ function standingAmount(decision: PlayerDecision): number | null {
 // carry the rest. No probabilities, no expected value, no "safe"/"risky" (P6.2).
 export function buildDecisionSituation(world: WorldState, decision: PlayerDecision): string {
   if (decision.kind === 'ASSET_UPGRADE') return buildUpgradeSituation(world, decision);
+  if (decision.kind === 'EDUCATION_ENROLMENT') return buildEducationSituation(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'the buyer';
   const amount = standingAmount(decision);
@@ -81,10 +88,35 @@ function buildUpgradeSituation(world: WorldState, decision: PlayerDecision): str
   );
 }
 
+// The framing of an education enrolment (Phase 9): a credential earned with money
+// and years, with nothing to show until the end. The genuine trade-off — cash and
+// tired evenings now against doors that open later — stated in prose, no mechanics.
+function buildEducationSituation(world: WorldState, decision: PlayerDecision): string {
+  const opp = findOpportunity(world, decision);
+  const prog = opp?.enrolment;
+  const place = parishName(world);
+  if (!prog) {
+    return `There is a chance to go back and study, if you can find the time and the money for it.`;
+  }
+  const monthly = Math.round(prog.totalCost / prog.durationMonths);
+  return (
+    `Word comes round that the community college is taking enrolments for ${prog.name}. You ` +
+    `have turned the thought over before — a qualification with your name on it, the kind of ` +
+    `paper that opens a door which otherwise stays shut.\n\n` +
+    `It comes to ${formatCurrency(prog.totalCost)} in all, spread across ${prog.durationMonths} ` +
+    `months — about ${formatCurrency(monthly)} going out every month while you study, and ` +
+    `nothing to show for it until the end. The evenings would be long and tired ones. But the ` +
+    `people who get on around ${place} are often the ones who put the years in when it was ` +
+    `hard to.\n\n` +
+    `Do you take it up, or leave it for another season?`
+  );
+}
+
 // A short, in-voice acknowledgement of the choice just made — the line the
 // resolution returns. No outcome, no judgement; the consequence comes later.
 export function buildDecisionAcknowledgement(world: WorldState, decision: PlayerDecision): string {
   if (decision.kind === 'ASSET_UPGRADE') return buildUpgradeAcknowledgement(world, decision);
+  if (decision.kind === 'EDUCATION_ENROLMENT') return buildEducationAcknowledgement(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'her';
   const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
@@ -103,6 +135,39 @@ function buildUpgradeAcknowledgement(world: WorldState, decision: PlayerDecision
     `It is done — ${label} is yours now. The work gets bigger from here, and so do the ` +
     `bills that come with it. Whatever the season brings, the asset is in your hands.`
   );
+}
+
+// The acknowledgement after an enrolment choice (Phase 9): the forms signed and the
+// first payment made, or the chance let go by. No outcome — the years do the work.
+function buildEducationAcknowledgement(world: WorldState, decision: PlayerDecision): string {
+  const opp = findOpportunity(world, decision);
+  const name = opp?.enrolment?.name ?? 'the course';
+  const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
+  if (chosen?.effect.enrol) {
+    return (
+      `You sign the forms and pay the first of it. ${capitalise(name)} is yours to see through ` +
+      `now — the evenings will be long, but you have started.`
+    );
+  }
+  return `You let it go by this time. Maybe the next intake. The money stays where it is, and so do you.`;
+}
+
+// The completion MEMORY (Phase 9): months of tuition and tired evenings, now a
+// credential earned. Surfaces the month the program finishes. No mechanics, no
+// claimed outcome the simulation didn't produce — just the weight of having done it.
+export function generateEducationCompletionEntry(world: WorldState, program: EnrolledProgram): NarrativeEntry {
+  const text =
+    `It is finished. The last of ${program.name} is behind you now — the late evenings, the ` +
+    `months the money went out with nothing to show, all of it settled into a qualification ` +
+    `with your name on it. You do not feel made over. But you carry something you did not carry ` +
+    `before, and there are doors that will open to you now that would have stayed shut. The ` +
+    `work was the whole of it. You did the work.`;
+  return {
+    type: 'MEMORY',
+    text,
+    month: world.month,
+    triggerId: `EDUCATION:${program.programId}:${world.month}`,
+  };
 }
 
 // The delayed consequence (P6.4): a MEMORY entry that surfaces months after the

@@ -13,6 +13,7 @@ import {
   buildDecisionSituation,
   buildDecisionAcknowledgement,
   generateConsequenceEntry,
+  generateEducationCompletionEntry,
   validateNarrativeEntry,
 } from '../index';
 
@@ -93,6 +94,52 @@ describe('Phase 7 — the asset-upgrade decision reads in voice and leaks no mec
     applyUpgradeFinancing(world, decision.id, 6000, 48);
     world.month = decision.consequenceMonth!;
     const entry = generateConsequenceEntry(world, decision);
+    expect(entry.type).toBe('MEMORY');
+    const result = validateNarrativeEntry(entry.text, 'ANNUAL_REFLECTION');
+    expect(result.valid, result.issues.join('; ')).toBe(true);
+    expect(entry.text.toLowerCase()).not.toContain('decision');
+  });
+});
+
+function studentWithOffer(seed = 51): WorldState {
+  const world = buildWorld(seed, { population: 60 });
+  const p = world.player;
+  p.occupation = null;
+  p.employmentStatus = 'EMPLOYED';
+  p.employer = null;
+  p.socialCapitalLocal = 0.1;
+  p.monthlyIncome = 1800;
+  p.cash = 20000;
+  world.month = 3;
+  surfaceOpportunities(world);
+  return world;
+}
+
+describe('Phase 9 — education reads in voice and leaks no mechanics', () => {
+  it('frames the enrol decision and its trade-off without numbers-as-mechanics', () => {
+    const world = studentWithOffer();
+    const decision = world.decisions.find((d) => d.kind === 'EDUCATION_ENROLMENT')!;
+    const situation = buildDecisionSituation(world, decision);
+    expect(situation.toLowerCase()).toContain('you');
+    expect(situation.toLowerCase()).toMatch(/month|study|qualification/);
+    expect(situation).not.toMatch(/expected|probability|risk level|%/i);
+  });
+
+  it('acknowledges enrolling without judging it', () => {
+    const world = studentWithOffer();
+    const decision = world.decisions.find((d) => d.kind === 'EDUCATION_ENROLMENT')!;
+    resolveDecision(world, decision.id, 'ENROL');
+    const ack = buildDecisionAcknowledgement(world, decision);
+    expect(ack.toLowerCase()).toContain('you');
+    expect(ack).not.toMatch(/right|wrong|good choice|bad choice/i);
+  });
+
+  it('lands a valid completion MEMORY that never names it a decision', () => {
+    const world = studentWithOffer();
+    const decision = world.decisions.find((d) => d.kind === 'EDUCATION_ENROLMENT')!;
+    resolveDecision(world, decision.id, 'ENROL');
+    const program = world.player.education!.enrolled!;
+    const entry = generateEducationCompletionEntry(world, program);
     expect(entry.type).toBe('MEMORY');
     const result = validateNarrativeEntry(entry.text, 'ANNUAL_REFLECTION');
     expect(result.valid, result.issues.join('; ')).toBe(true);

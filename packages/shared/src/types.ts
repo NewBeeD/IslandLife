@@ -1,6 +1,7 @@
 import type {
   BankState,
   CompanyStatus,
+  CredentialLevel,
   EmploymentStatus,
   ExperienceDomains,
   FamilyBackground,
@@ -119,6 +120,40 @@ export interface Company {
   estimatedAnnualTax: number;
 }
 
+// ── Education & credentials (Phase 9) ────────────────────────────────────────
+// A program raises the player's knowledge over time and earns a credential; a
+// credential unlocks gated opportunities. `field` is the domain the program builds
+// (an Industry's knowledge, or GENERAL literacy/cultural capital). All optional on
+// the agent: undefined education === NONE / not enrolled (the digest holds).
+export type EducationField = Industry | 'GENERAL';
+
+// The hidden spec of an enrolment opportunity — the program on offer.
+export interface EducationProgram {
+  programId: string;
+  name: string; // player-facing prose: "a marine studies certificate"
+  field: EducationField;
+  targetLevel: CredentialLevel; // the credential it confers
+  prerequisite: CredentialLevel; // the level the player must already hold
+  totalCost: number; // EC$ over the whole program
+  durationMonths: number;
+}
+
+// The program the player is currently enrolled in (a real multi-month cash drain).
+export interface EnrolledProgram {
+  programId: string;
+  name: string;
+  field: EducationField;
+  targetLevel: CredentialLevel;
+  monthsRemaining: number;
+  monthlyCost: number; // EC$/month tuition
+  completionMonth: number; // world.month at which it finishes
+}
+
+export interface Education {
+  level: CredentialLevel;
+  enrolled?: EnrolledProgram | null;
+}
+
 // ── Ventures (Phase 8: the income spine) ─────────────────────────────────────
 // A concurrent income stream the player runs — a fishing boat, a minibus route, a
 // roadside juice stand — each with its own assets, output, operating cost, and
@@ -225,6 +260,11 @@ export interface NPCAgent {
   // active ventures and the single-stream fields above are unused. Undefined for
   // NPCs and a pre-Phase-8 player, so they stay byte-identical (the digest holds).
   ventures?: Venture[];
+
+  // ── Phase 9: education & credentials ────────────────────────────────────────
+  // Optional. Undefined === { level: 'NONE', not enrolled }. Only the player enrols
+  // in Phase 9, so NPCs and a pre-Phase-9 player stay byte-identical.
+  education?: Education;
 }
 
 export interface ActivePolicy {
@@ -272,7 +312,7 @@ export interface LegacyScore {
 // only prose + neutral option text — `monthlyAmount`, `expectedReturn`, and the
 // option `effect` never cross the wire (S3, the iceberg).
 
-export type OpportunityKind = 'EUNICE_SUPPLY_CONTRACT' | 'ASSET_UPGRADE';
+export type OpportunityKind = 'EUNICE_SUPPLY_CONTRACT' | 'ASSET_UPGRADE' | 'EDUCATION_ENROLMENT';
 export type OpportunityStatus = 'OPEN' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
 
 // The hidden spec of an asset-upgrade opportunity (Phase 7). A bigger boat, a
@@ -309,6 +349,7 @@ export interface Opportunity {
   // The venture this upgrade grows (Phase 8). Undefined → the implicit single-stream
   // player ("venture 0"); set → the asset and output bump land on that venture.
   ventureId?: string;
+  enrolment?: EducationProgram; // present for EDUCATION_ENROLMENT opportunities
 }
 
 // One unlabelled option. `label`/`description` are neutral player-facing prose (no
@@ -317,7 +358,10 @@ export interface DecisionOption {
   id: string;
   label: string;
   description: string;
-  effect: { incomeMode: 'SPOT' | 'STANDING'; standingAmount?: number };
+  // The hidden mechanical resolution. `incomeMode`/`standingAmount` drive the income
+  // decisions (Eunice); `enrol` marks the accept option of an education enrolment
+  // (Phase 9). Never projected — the player reads only label/description.
+  effect: { incomeMode?: 'SPOT' | 'STANDING'; standingAmount?: number; enrol?: boolean };
 }
 
 export interface PlayerDecision {

@@ -1,5 +1,6 @@
-import { GOODS, REPRESENTATIVE_GOOD } from '@island/shared';
+import { GOODS, REPRESENTATIVE_GOOD, credentialRank } from '@island/shared';
 import type {
+  CredentialLevel,
   DecisionOption,
   Industry,
   Opportunity,
@@ -10,6 +11,7 @@ import type {
 import { assessLoanApplication, originateLoan } from './banking';
 import type { LoanAssessment } from './banking';
 import { activeVentures, aggregateVentureIncome, hasVentures } from './ventures';
+import { credentialLevelOf, enrolPlayer, surfaceEducation } from './education';
 import { clamp } from './rng';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -110,6 +112,7 @@ const UPGRADE_WINDOW = 3;
 interface UpgradeTemplate extends UpgradeSpec {
   vendorName: string;
   minExperience: number; // domain experience the player needs before it is offered
+  minCredential?: CredentialLevel; // a credential gate (Phase 9); absent → no gate
 }
 
 // Per-industry upgrade ladders (ascending price/ambition). Grounded in everyday
@@ -118,6 +121,9 @@ const UPGRADE_CATALOGUE: Partial<Record<Industry, UpgradeTemplate[]>> = {
   FISHING: [
     { id: 'UPG_FISH_1', vendorName: "Baron's Marine", assetType: 'VEHICLE', assetSize: 'MEDIUM', assetLabel: 'a bigger pirogue and a new outboard engine', assetPrice: 28000, outputScaleDelta: 0.6, operatingCostDelta: 450, riskLevel: 'MEDIUM', minTermMonths: 24, maxTermMonths: 60, minExperience: 0.2 },
     { id: 'UPG_FISH_2', vendorName: "Baron's Marine", assetType: 'VEHICLE', assetSize: 'LARGE', assetLabel: 'a fibreglass boat with twin engines and an ice hold', assetPrice: 65000, outputScaleDelta: 1.2, operatingCostDelta: 1100, riskLevel: 'HIGH', minTermMonths: 36, maxTermMonths: 84, minExperience: 0.45 },
+    // A commercial-scale step the bank and the buyers only take you seriously for
+    // once you hold a credential — gated on an associate (Phase 9, P9.4).
+    { id: 'UPG_FISH_3', vendorName: 'a broker handling the export trade', assetType: 'VEHICLE', assetSize: 'LARGE', assetLabel: 'a commercial longliner rigged for the export market', assetPrice: 140000, outputScaleDelta: 2.4, operatingCostDelta: 2600, riskLevel: 'HIGH', minTermMonths: 48, maxTermMonths: 96, minExperience: 0.6, minCredential: 'ASSOCIATE' },
   ],
   AGRICULTURE: [
     { id: 'UPG_AGRI_1', vendorName: 'a neighbour selling out', assetType: 'LAND', assetSize: 'MEDIUM', assetLabel: 'another acre of provision ground and proper tools', assetPrice: 18000, outputScaleDelta: 0.5, operatingCostDelta: 200, riskLevel: 'MEDIUM', minTermMonths: 24, maxTermMonths: 72, minExperience: 0.2 },
@@ -161,12 +167,18 @@ function rungIdOf(assetId: string): string {
 }
 
 // The next eligible rung for a trade: the lowest-priced tier past the experience
-// gate that the owner does not already hold.
-function nextRung(industry: Industry, experience: number, ownedRungIds: Set<string>): UpgradeTemplate | null {
+// gate (and any credential gate, Phase 9) that the owner does not already hold.
+function nextRung(
+  industry: Industry,
+  experience: number,
+  ownedRungIds: Set<string>,
+  credential: CredentialLevel,
+): UpgradeTemplate | null {
   const ladder = UPGRADE_CATALOGUE[industry];
   if (!ladder) return null;
   for (const t of ladder) {
     if (experience < t.minExperience) continue;
+    if (t.minCredential && credentialRank(credential) < credentialRank(t.minCredential)) continue;
     if (ownedRungIds.has(t.id)) continue; // already bought this rung
     return t;
   }
@@ -179,12 +191,13 @@ function nextRung(industry: Industry, experience: number, ownedRungIds: Set<stri
 // candidate for their occupation (byte-identical to Phase 7). Deterministic.
 function upgradeCandidates(world: WorldState): UpgradeCandidate[] {
   const p = world.player;
+  const credential = credentialLevelOf(p);
   const out: UpgradeCandidate[] = [];
   if (hasVentures(p)) {
     for (const v of activeVentures(p)) {
       const exp = p.experience[DOMAIN_OF[v.industry]] ?? 0;
       const owned = new Set(v.assets.map((a) => rungIdOf(a.id)));
-      const t = nextRung(v.industry, exp, owned);
+      const t = nextRung(v.industry, exp, owned, credential);
       if (t) out.push({ template: t, industry: v.industry, ventureId: v.id });
     }
     return out;
@@ -192,7 +205,7 @@ function upgradeCandidates(world: WorldState): UpgradeCandidate[] {
   if (p.employmentStatus !== 'SELF_EMPLOYED' || !p.occupation) return out;
   const exp = p.experience[DOMAIN_OF[p.occupation]] ?? 0;
   const owned = new Set(p.economicAssets.map((a) => a.id));
-  const t = nextRung(p.occupation, exp, owned);
+  const t = nextRung(p.occupation, exp, owned, credential);
   if (t) out.push({ template: t, industry: p.occupation });
   return out;
 }
@@ -303,6 +316,10 @@ export function surfaceOpportunities(world: WorldState): Opportunity[] {
   const upgrade = surfaceUpgrade(world);
   if (upgrade) surfaced.push(upgrade);
 
+  // Education enrolment — a way to invest in a credential (Phase 9).
+  const enrolment = surfaceEducation(world);
+  if (enrolment) surfaced.push(enrolment);
+
   return surfaced;
 }
 
@@ -340,6 +357,20 @@ export function resolveDecision(
   decision.chosenOptionId = option.id;
   decision.resolvedMonth = world.month;
   decision.consequenceMonth = world.month + CONSEQUENCE_LAG_MONTHS;
+
+  // Education enrolment (Phase 9): accepting commits the program; declining is a
+  // no-op. Completion (and its narrative) is driven by detectEducationCompletions,
+  // not the generic consequence path, so clear the consequence month.
+  if (decision.kind === 'EDUCATION_ENROLMENT') {
+    decision.consequenceMonth = null;
+    if (option.effect.enrol && opportunity?.enrolment) {
+      enrolPlayer(world, opportunity.enrolment);
+      if (opportunity) opportunity.status = 'ACCEPTED';
+    } else if (opportunity) {
+      opportunity.status = 'DECLINED';
+    }
+    return decision;
+  }
 
   const player = world.player;
   if (option.effect.incomeMode === 'STANDING') {

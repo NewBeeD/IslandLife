@@ -5,6 +5,7 @@ import { checkBankSolvency } from './banking';
 import { applyClosureCascade, checkCompanySolvency, computeCompanyRevenue } from './company';
 import { rollRandomEvents } from './events';
 import { governmentAct } from './government';
+import { chargeTuition } from './education';
 import { computeLegacyIncrement } from './legacy';
 import { updateMarketPrice } from './market';
 import { activeVentures, hasVentures, totalOperatingCosts } from './ventures';
@@ -73,7 +74,10 @@ export function simulateOneMonth(world: WorldState): WorldState {
     // so NPC and default-player cash math is unchanged (the digest holds). Phase 8:
     // a venture portfolio sums upkeep across its ventures (still 0 for NPCs).
     const operating = totalOperatingCosts(agent);
-    const newCash = agent.cash + income - personalLoanPayments - spending - operating;
+    // Tuition while enrolled (Phase 9) — a real monthly drain; 0 for everyone not
+    // studying, so NPC/default-player cash math is unchanged (the digest holds).
+    const tuition = chargeTuition(agent);
+    const newCash = agent.cash + income - personalLoanPayments - spending - operating - tuition;
     const hasActiveLoan = agent.loans.some((l) => l.status === 'ACTIVE');
 
     if (agent.isPlayer && hasActiveLoan) {

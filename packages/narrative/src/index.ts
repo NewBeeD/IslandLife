@@ -47,6 +47,7 @@ export {
   buildDecisionSituation,
   buildDecisionAcknowledgement,
   generateConsequenceEntry,
+  generateEducationCompletionEntry,
 } from './decisions';
 export {
   LLM_GENERATION_TRIGGERS,

@@ -42,6 +42,16 @@ export {
   aggregateVentureIncome,
   totalOperatingCosts,
 } from './ventures';
+export {
+  credentialLevelOf,
+  isEnrolled,
+  eligiblePrograms,
+  surfaceEducation,
+  enrolPlayer,
+  chargeTuition,
+  detectEducationCompletions,
+  monthlyTuition,
+} from './education';
 export { worldDigest } from './digest';
 export { serializeWorld, deserializeWorld } from './serialize';
 export type { SerializedWorld, SerializedAgent, SerializedCompany } from './serialize';
