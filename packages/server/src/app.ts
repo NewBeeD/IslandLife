@@ -1,7 +1,9 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import {
   DecisionError,
+  applyUpgradeFinancing,
   detectDueConsequences,
+  quoteUpgradeFinancing,
   resolveDecision,
   simulateOneMonth,
   surfaceOpportunities,
@@ -35,6 +37,7 @@ import {
   toCommunityDTO,
   toDecisionDTO,
   toFeedDTO,
+  toFinancingQuoteDTO,
   toMoneyDTO,
   toOpportunitiesDTO,
   toStateDTO,
@@ -169,39 +172,78 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
     },
   );
 
-  // POST /saves/:id/decisions/:did — submit a choice. Feeds it back into the
-  // player's economic state (P6.3) and persists. Body: { optionId }.
-  app.post<{ Params: { id: string; did: string }; Body: { optionId?: string } }>(
-    '/saves/:id/decisions/:did',
-    async (req, reply) => {
-      const loaded = await loadOr404(req.params.id, reply);
-      if (!loaded) return;
-      const optionId = req.body?.optionId;
-      if (!optionId) return reply.code(400).send({ error: 'optionId is required' });
-
-      const { world } = loaded;
-      let decision;
-      try {
-        decision = resolveDecision(world, req.params.did, optionId);
-      } catch (err) {
-        if (err instanceof DecisionError) {
-          const code =
-            err.code === 'NOT_FOUND' ? 404 : err.code === 'ALREADY_RESOLVED' ? 409 : 400;
-          return reply.code(code).send({ error: err.message });
-        }
-        throw err;
+  // POST /saves/:id/decisions/:did/quote — a read-only financing quote for an
+  // asset-upgrade decision (the down-payment slider polls this as the player drags).
+  // Loads the world, assesses the loan, returns the live terms, and DOES NOT persist.
+  // Body: { downPayment, termMonths }.
+  app.post<{
+    Params: { id: string; did: string };
+    Body: { downPayment?: number; termMonths?: number };
+  }>('/saves/:id/decisions/:did/quote', async (req, reply) => {
+    const loaded = await loadOr404(req.params.id, reply);
+    if (!loaded) return;
+    const downPayment = Number(req.body?.downPayment ?? 0);
+    const termMonths = Number(req.body?.termMonths ?? 0);
+    if (!Number.isFinite(downPayment) || !Number.isFinite(termMonths) || termMonths <= 0) {
+      return reply.code(400).send({ error: 'downPayment and a positive termMonths are required' });
+    }
+    try {
+      const quote = quoteUpgradeFinancing(loaded.world, req.params.did, downPayment, termMonths);
+      return toFinancingQuoteDTO(quote);
+    } catch (err) {
+      if (err instanceof DecisionError) {
+        const code = err.code === 'NOT_FOUND' ? 404 : err.code === 'EXPIRED' ? 409 : 400;
+        return reply.code(code).send({ error: err.message });
       }
+      throw err;
+    }
+  });
 
-      await saveTick(req.params.id, world);
+  // POST /saves/:id/decisions/:did — submit a choice. For an option-based decision
+  // (Eunice), body is { optionId }. For an asset upgrade, body is
+  // { financing: { downPayment, termMonths } } — the server re-quotes authoritatively,
+  // takes the down payment, books the approved loan, buys the asset, and persists.
+  app.post<{
+    Params: { id: string; did: string };
+    Body: { optionId?: string; financing?: { downPayment?: number; termMonths?: number } };
+  }>('/saves/:id/decisions/:did', async (req, reply) => {
+    const loaded = await loadOr404(req.params.id, reply);
+    if (!loaded) return;
+    const { world } = loaded;
+    const financing = req.body?.financing;
 
-      const result: DecisionResultDTO = {
-        decisionId: decision.id,
-        chosenOptionId: decision.chosenOptionId!,
-        acknowledgement: buildDecisionAcknowledgement(world, decision),
-      };
-      return result;
-    },
-  );
+    let decision;
+    try {
+      if (financing) {
+        const downPayment = Number(financing.downPayment ?? 0);
+        const termMonths = Number(financing.termMonths ?? 0);
+        if (!Number.isFinite(downPayment) || !Number.isFinite(termMonths) || termMonths <= 0) {
+          return reply.code(400).send({ error: 'financing requires downPayment and a positive termMonths' });
+        }
+        decision = applyUpgradeFinancing(world, req.params.did, downPayment, termMonths).decision;
+      } else {
+        const optionId = req.body?.optionId;
+        if (!optionId) return reply.code(400).send({ error: 'optionId or financing is required' });
+        decision = resolveDecision(world, req.params.did, optionId);
+      }
+    } catch (err) {
+      if (err instanceof DecisionError) {
+        const code =
+          err.code === 'NOT_FOUND' ? 404 : err.code === 'ALREADY_RESOLVED' ? 409 : err.code === 'EXPIRED' ? 409 : 400;
+        return reply.code(code).send({ error: err.message });
+      }
+      throw err;
+    }
+
+    await saveTick(req.params.id, world);
+
+    const result: DecisionResultDTO = {
+      decisionId: decision.id,
+      chosenOptionId: decision.chosenOptionId!,
+      acknowledgement: buildDecisionAcknowledgement(world, decision),
+    };
+    return result;
+  });
 
   // POST /saves/:id/advance — advance one month. Runs simulateOneMonth, fires the
   // Layer-1 template narrative synchronously, persists both, and returns the

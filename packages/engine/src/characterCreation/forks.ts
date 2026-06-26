@@ -6,9 +6,12 @@ import type {
 } from '@island/shared';
 import type { ProfileDraft } from './draft';
 
+// Most forks present four options (A–D); the `background` fork (Fork 1) presents
+// eight grounded livelihoods (A–H). `BackgroundOption` widens only that fork.
 export type ForkOption = 'A' | 'B' | 'C' | 'D';
+export type BackgroundOption = ForkOption | 'E' | 'F' | 'G' | 'H';
 export interface CreationChoices {
-  background: ForkOption; // Fork 1
+  background: BackgroundOption; // Fork 1 (8 options)
   school: ForkOption; // Fork 2
   formative: ForkOption; // Fork 3
   tendency: ForkOption; // Fork 4
@@ -21,6 +24,10 @@ const FAMILY_INDUSTRY: Record<FamilyBackground, keyof ExperienceDomains | null> 
   FARMING_INTERIOR: 'agriculture',
   TRADING_ROSEAU: 'informalTrade',
   CIVIL_SERVANT_ROSEAU: null,
+  MINIBUS_DRIVER: 'transportation',
+  MASON_CONSTRUCTION: 'construction',
+  GUESTHOUSE_TOURISM: 'tourism',
+  SHOPKEEPER_RETAIL: 'retail',
 };
 
 // When a fork writes to "[familyIndustry]" and it resolves to null (civil
@@ -34,7 +41,7 @@ function experienceDomainFor(fb: FamilyBackground): keyof ExperienceDomains {
 }
 
 // ── Fork 1: Family background ───────────────────────────────────────
-function fork1(d: ProfileDraft, opt: ForkOption, rng: RNG): void {
+function fork1(d: ProfileDraft, opt: BackgroundOption, rng: RNG): void {
   switch (opt) {
     case 'A': // Fishing family, Portsmouth
       d.cash += 2000;
@@ -80,6 +87,52 @@ function fork1(d: ProfileDraft, opt: ForkOption, rng: RNG): void {
       d.socialCapitalDiaspora += 0.15; d.culturalCapital += 0.05;
       d.knowledge.informalTrade += 0.45; d.knowledge.retail += 0.3;
       d.experience.informalTrade += 0.25; d.experience.retail += 0.15;
+      break;
+    case 'E': // Minibus / taxi family, Roseau routes
+      d.cash += 2500;
+      d.economicAssets.push({ id: 'ASSET_VEHICLE', type: 'VEHICLE', size: 'MEDIUM', value: 22000 });
+      d.birthParish = 'SAINT_GEORGE';
+      d.familyBackground = 'MINIBUS_DRIVER';
+      d.extraversion += 0.2; d.agreeableness += 0.05; d.conscientiousness += 0.1;
+      d.openness += 0.05; d.neuroticism += 0.05;
+      d.resilience += 0.1; d.selfControl += 0.05;
+      d.socialCapitalLocal += 0.25; d.socialCapitalInstitutional += 0.05; d.culturalCapital -= 0.05;
+      d.knowledge.transportation += 0.45; d.knowledge.informalTrade += 0.15;
+      d.experience.transportation += 0.3;
+      break;
+    case 'F': // Mason / construction family
+      d.cash += 2200;
+      d.economicAssets.push({ id: 'ASSET_TOOLS', type: 'EQUIPMENT', size: 'SMALL', value: 6000 });
+      d.birthParish = rng.pick(['SAINT_GEORGE', 'SAINT_PAUL', 'SAINT_JOSEPH'] as const);
+      d.familyBackground = 'MASON_CONSTRUCTION';
+      d.extraversion += 0.05; d.agreeableness += 0.05; d.conscientiousness += 0.2;
+      d.openness -= 0.05; d.neuroticism += 0.05;
+      d.resilience += 0.2; d.selfControl += 0.1;
+      d.socialCapitalLocal += 0.2; d.socialCapitalInstitutional += 0.05; d.culturalCapital -= 0.05;
+      d.knowledge.construction += 0.5; d.experience.construction += 0.3;
+      break;
+    case 'G': // Guesthouse / tourism family
+      d.cash += 3000;
+      d.birthParish = rng.pick(['SAINT_GEORGE', 'SAINT_JOHN'] as const);
+      d.familyBackground = 'GUESTHOUSE_TOURISM';
+      d.extraversion += 0.15; d.agreeableness += 0.15; d.conscientiousness += 0.15;
+      d.openness += 0.15; d.neuroticism += 0.05;
+      d.resilience += 0.05; d.selfControl += 0.05;
+      d.socialCapitalLocal += 0.15; d.socialCapitalInstitutional += 0.1;
+      d.socialCapitalDiaspora += 0.1; d.culturalCapital += 0.15;
+      d.knowledge.tourism += 0.45; d.knowledge.generalLiteracy += 0.15;
+      d.experience.tourism += 0.25;
+      break;
+    case 'H': // Shopkeeper family, village shop
+      d.cash += 3500;
+      d.birthParish = rng.pick(['SAINT_GEORGE', 'SAINT_PAUL', 'SAINT_ANDREW'] as const);
+      d.familyBackground = 'SHOPKEEPER_RETAIL';
+      d.extraversion += 0.1; d.agreeableness += 0.1; d.conscientiousness += 0.15;
+      d.openness += 0.05; d.neuroticism += 0.05;
+      d.resilience += 0.1; d.selfControl += 0.15;
+      d.socialCapitalLocal += 0.2; d.socialCapitalInstitutional += 0.1; d.culturalCapital += 0.05;
+      d.knowledge.retail += 0.45; d.knowledge.finance += 0.1; d.knowledge.informalTrade += 0.15;
+      d.experience.retail += 0.3;
       break;
   }
 }

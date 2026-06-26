@@ -27,7 +27,12 @@ export interface StateDTO {
 }
 
 // GET /saves/:id/money — the Money view. Income/expense lines, this-month delta,
-// assets, debts. Deliberately no net worth, no interest rate, no forecast.
+// assets, debts, and (Phase 7, the scoped S3 amendment) the player's OWN finances
+// in full: asset values, each loan's interest rate + interest/principal split, and
+// a derived net worth. This is the one DTO permitted to carry `interestRate` and
+// `netWorth` — it is the player looking at their own books. Other people's hidden
+// mechanics (NPC psychology, opportunity expected value/risk) still never leak.
+// `netWorth` is DERIVED here, never stored (S4 holds).
 export interface MoneyLine {
   label: string;
   amount: number; // EC$, always positive; the section gives the sign
@@ -36,12 +41,17 @@ export interface MoneyLine {
 export interface AssetLine {
   label: string;
   ownership: string; // "Yours"
+  value: number; // EC$ — the asset's worth (Phase 7: shown to the player)
 }
 
 export interface DebtLine {
   label: string;
   remaining: number; // EC$ remaining principal
-  monthlyPayment: number; // EC$/month (the agreed payment — NOT the interest rate)
+  principal: number; // EC$ original principal borrowed
+  monthlyPayment: number; // EC$/month (the agreed payment)
+  interestRate: number; // annual rate, e.g. 0.0925 (Phase 7: the player's own loan, shown)
+  interestPortion: number; // EC$ of the next payment that is interest
+  principalPortion: number; // EC$ of the next payment that pays down principal
   monthsLeft: number;
 }
 
@@ -53,7 +63,8 @@ export interface MoneyDTO {
   thisMonthDelta: number; // income total − expense total (can be negative)
   assets: AssetLine[];
   debts: DebtLine[];
-  notes: string[]; // contextual prose, e.g. a short-this-month warning. No numbers beyond EC$.
+  netWorth: number; // EC$ — cash + Σ asset value − Σ remaining principal (derived)
+  notes: string[]; // contextual prose, e.g. a short-this-month warning.
 }
 
 // GET /saves/:id/feed?month= — the Daily Life feed for a month.
@@ -109,14 +120,47 @@ export interface DecisionOptionDTO {
   description: string; // what it means, in prose; no value/probability/risk label
 }
 
+// An asset-upgrade decision is financed interactively (the down-payment slider),
+// not chosen from a fixed option list. This describes the slider's bounds; the live
+// terms come from the quote endpoint (Phase 7). `interestRate` here is the player's
+// own prospective loan — permitted, like the money view (the scoped S3 amendment).
+export interface FinancingControlDTO {
+  assetLabel: string; // "a bigger pirogue and a new outboard engine"
+  assetPrice: number; // EC$ full cost
+  maxDownPayment: number; // EC$ — min(cash, price)
+  minDownPayment: number; // EC$ — usually 0
+  cashOnHand: number; // EC$ — what the player has to put down
+  termOptions: number[]; // selectable loan terms in months
+}
+
 export interface DecisionDTO {
   id: string;
-  title: string; // "Eunice's offer"
+  title: string; // "Eunice's offer" / "A bigger boat"
   situation: string; // the narrative framing of the choice
-  options: DecisionOptionDTO[];
+  // 'OPTIONS' — a fixed list of unlabelled choices (the Eunice path). 'FINANCING' —
+  // an interactive down-payment slider + quote (asset upgrades).
+  interaction: 'OPTIONS' | 'FINANCING';
+  options: DecisionOptionDTO[]; // populated for 'OPTIONS'
+  financing?: FinancingControlDTO; // populated for 'FINANCING'
   status: 'OPEN' | 'RESOLVED' | 'EXPIRED';
   window: string; // "She needs an answer this month"
   chosenOptionId: string | null;
+}
+
+// POST /saves/:id/decisions/:did/quote — a live financing quote for the slider. The
+// outcome may be a COUNTER: the bank offers `approvedLoan` (less than `requestedLoan`)
+// to fit the player's risk profile, which means putting more down. No raw credit
+// score is exposed — the player applies and finds out.
+export interface FinancingQuoteDTO {
+  downPayment: number; // EC$ the player chose to put down
+  requestedLoan: number; // EC$ they asked to borrow (price − downPayment)
+  outcome: 'APPROVED' | 'COUNTER' | 'DECLINED';
+  approvedLoan: number; // EC$ the bank will actually lend (≤ requested)
+  interestRate: number; // annual, e.g. 0.0925 (the player's own prospective loan)
+  monthlyPayment: number; // EC$/month for the approved loan
+  termMonths: number;
+  bankLabel: string; // "NCB" / "the credit union"
+  reason: string; // plain language ("Approved." / "Put more down…")
 }
 
 // POST /saves/:id/decisions/:did — the resolution. Confirms the choice and carries

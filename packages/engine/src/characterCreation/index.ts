@@ -9,7 +9,7 @@ export { emptyKnowledge, emptyExperience } from './draft';
 export { applyForks } from './forks';
 export { hydratePlayerInto } from './hydrate';
 export type { ProfileDraft } from './draft';
-export type { CreationChoices, ForkOption } from './forks';
+export type { CreationChoices, ForkOption, BackgroundOption } from './forks';
 
 // A profile from base distributions only (no fork choices applied).
 export function createBaseProfile(rng: RNG): CharacterProfile {

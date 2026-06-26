@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "sim": "tsx tools/sim-cli/src/run.ts",
-    "serve": "tsx packages/server/src/server.ts",
+    "serve": "tsx watch packages/server/src/server.ts",
     "narrative:smoke": "tsx packages/narrative/src/smoke.ts",
     "dev:web": "vite --config packages/web/vite.config.ts",
     "build:web": "vite build --config packages/web/vite.config.ts",

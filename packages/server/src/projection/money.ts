@@ -1,15 +1,19 @@
 import { gameDateLabel } from '@island/shared';
+import { netWorthOf } from '@island/engine';
 import type { AssetLine, DebtLine, MoneyDTO, MoneyLine, WorldState } from '@island/shared';
 import { INCOME_LINE_LABEL, assetLabel, bankLabel } from './labels';
 
 // GET /saves/:id/money — the Money view. Income and expense lines reconstructed to
 // match what actually moved the player's cash this month (engine phase 5), plus
-// assets and debts. Deliberately omits: net worth, the loan interest rate, any
-// forecast. The player does their own mental accounting (Player Experience doc).
+// assets, debts, and (Phase 7, the scoped S3 amendment) the player's own finances
+// in full: asset values, each loan's interest rate + interest/principal split, and
+// a derived net worth. The player is looking at their own books — but other
+// people's hidden mechanics still never appear here.
 export function toMoneyDTO(world: WorldState): MoneyDTO {
   const p = world.player;
   const activeLoans = p.loans.filter((l) => l.status === 'ACTIVE');
   const loanPayments = activeLoans.reduce((s, l) => s + l.monthlyPayment, 0);
+  const operatingCosts = p.monthlyOperatingCosts ?? 0;
 
   // Mirror the engine's phase-5 cash math so "in" and "out" reconcile with the
   // actual cash change: income, then living costs plus lifestyle creep on surplus.
@@ -32,6 +36,9 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
   const expenseLines: MoneyLine[] = [{ label: 'Food and household', amount: Math.round(p.monthlyLivingCosts) }];
   const dayToDay = Math.round(spending - p.monthlyLivingCosts);
   if (dayToDay >= 1) expenseLines.push({ label: 'Day-to-day spending', amount: dayToDay });
+  if (operatingCosts >= 1) {
+    expenseLines.push({ label: 'Fuel and upkeep', amount: Math.round(operatingCosts) });
+  }
   for (const l of activeLoans) {
     expenseLines.push({ label: `Loan repayment (${bankLabel(l.bankId)})`, amount: Math.round(l.monthlyPayment) });
   }
@@ -40,14 +47,22 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
   const assets: AssetLine[] = p.economicAssets.map((a) => ({
     label: assetLabel(a.type, a.size),
     ownership: 'Yours',
+    value: Math.round(a.value),
   }));
 
-  const debts: DebtLine[] = activeLoans.map((l) => ({
-    label: `${bankLabel(l.bankId)} loan`,
-    remaining: Math.round(l.remainingPrincipal),
-    monthlyPayment: Math.round(l.monthlyPayment),
-    monthsLeft: Math.max(0, l.termMonths - (world.month - l.originMonth)),
-  }));
+  const debts: DebtLine[] = activeLoans.map((l) => {
+    const interestPortion = (l.remainingPrincipal * l.interestRate) / 12;
+    return {
+      label: `${bankLabel(l.bankId)} loan`,
+      remaining: Math.round(l.remainingPrincipal),
+      principal: Math.round(l.principal),
+      monthlyPayment: Math.round(l.monthlyPayment),
+      interestRate: l.interestRate,
+      interestPortion: Math.round(interestPortion),
+      principalPortion: Math.max(0, Math.round(l.monthlyPayment - interestPortion)),
+      monthsLeft: Math.max(0, l.termMonths - (world.month - l.originMonth)),
+    };
+  });
 
   // Contextual prose, never "WARNING: DEFAULT RISK". If the payment won't clear
   // from cash on hand, say so plainly and leave the decision to the player.
@@ -66,6 +81,7 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
     thisMonthDelta: incomeTotal - expenseTotal,
     assets,
     debts,
+    netWorth: Math.round(netWorthOf(p)),
     notes,
   };
 }

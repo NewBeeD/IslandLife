@@ -34,6 +34,7 @@ function standingAmount(decision: PlayerDecision): number | null {
 // Experience doc). Sets up the genuine trade-off in prose; the options themselves
 // carry the rest. No probabilities, no expected value, no "safe"/"risky" (P6.2).
 export function buildDecisionSituation(world: WorldState, decision: PlayerDecision): string {
+  if (decision.kind === 'ASSET_UPGRADE') return buildUpgradeSituation(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'the buyer';
   const amount = standingAmount(decision);
@@ -56,9 +57,34 @@ export function buildDecisionSituation(world: WorldState, decision: PlayerDecisi
   );
 }
 
+// The framing of an asset-upgrade choice (Phase 7): the chance to grow the trade,
+// the money it takes, and the heavier costs that come with the bigger asset. The
+// player decides how much to borrow on the financing slider. No raw mechanics.
+function buildUpgradeSituation(world: WorldState, decision: PlayerDecision): string {
+  const opp = findOpportunity(world, decision);
+  const spec = opp?.upgrade;
+  const vendor = opp?.npcName ?? 'a dealer';
+  const place = parishName(world);
+  if (!spec) {
+    return `There is a chance in front of you to grow the work, if you can find the money for it.`;
+  }
+  return (
+    `There is ${spec.assetLabel} to be had — ${vendor} has it, and the price is ` +
+    `${formatCurrency(spec.assetPrice)}. You have turned it over in your mind more than once.\n\n` +
+    `It would mean more coming in: a bigger day's work when the work is there. But it is ` +
+    `real money up front, more than you keep in the house, and the bigger you go the more it ` +
+    `costs you every month whether the season is kind or not — fuel, upkeep, and the bank's ` +
+    `payment landing the same in a lean month as a fat one.\n\n` +
+    `You could put down what you have and borrow the rest, or hold and keep things the size ` +
+    `they are. Around ${place} a person is known by the steps they take and the ones they ` +
+    `don't. How much of this do you want to carry?`
+  );
+}
+
 // A short, in-voice acknowledgement of the choice just made — the line the
 // resolution returns. No outcome, no judgement; the consequence comes later.
 export function buildDecisionAcknowledgement(world: WorldState, decision: PlayerDecision): string {
+  if (decision.kind === 'ASSET_UPGRADE') return buildUpgradeAcknowledgement(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'her';
   const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
@@ -68,10 +94,22 @@ export function buildDecisionAcknowledgement(world: WorldState, decision: Player
   return `You tell ${name} you will keep things as they are. She nods — no hard feelings — and the wharf stays your market.`;
 }
 
+// The acknowledgement after an upgrade is bought — the equipment is yours, and (if
+// financed) the bank's payment is now part of the month. No outcome, no judgement.
+function buildUpgradeAcknowledgement(world: WorldState, decision: PlayerDecision): string {
+  const opp = findOpportunity(world, decision);
+  const label = opp?.upgrade?.assetLabel ?? 'the bigger setup';
+  return (
+    `It is done — ${label} is yours now. The work gets bigger from here, and so do the ` +
+    `bills that come with it. Whatever the season brings, the asset is in your hands.`
+  );
+}
+
 // The delayed consequence (P6.4): a MEMORY entry that surfaces months after the
 // choice and connects back to it WITHOUT naming it as a decision. The path taken,
 // or the path not taken, simply shows up in the life. Passes the voice validator.
 export function generateConsequenceEntry(world: WorldState, decision: PlayerDecision): NarrativeEntry {
+  if (decision.kind === 'ASSET_UPGRADE') return generateUpgradeConsequence(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'Eunice';
   const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
@@ -99,4 +137,29 @@ export function generateConsequenceEntry(world: WorldState, decision: PlayerDeci
     month: world.month,
     triggerId: `CONSEQUENCE:${decision.id}`,
   };
+}
+
+// The delayed MEMORY after an upgrade: how a season or two treated the bet — the
+// bigger output against the heavier fixed costs. Connects back without naming it a
+// decision, and without claiming an outcome the simulation didn't produce.
+function generateUpgradeConsequence(world: WorldState, decision: PlayerDecision): NarrativeEntry {
+  const opp = findOpportunity(world, decision);
+  const label = opp?.upgrade?.assetLabel ?? 'the bigger setup';
+  const text =
+    `The bigger work has its own rhythm now. ${capitalise(label)} earns its keep in the good ` +
+    `weeks — more comes in than ever did before, and you feel the weight of having reached ` +
+    `for it. The lean weeks are heavier too: the payment and the upkeep do not soften when ` +
+    `the season does, and there were mornings you did the sums twice. You knew the shape of ` +
+    `the bet when you made it. Some days it sits easy, some days it does not. You carry it ` +
+    `either way, the way you carry everything you chose.`;
+  return {
+    type: 'MEMORY',
+    text,
+    month: world.month,
+    triggerId: `CONSEQUENCE:${decision.id}`,
+  };
+}
+
+function capitalise(s: string): string {
+  return s.length > 0 ? s[0]!.toUpperCase() + s.slice(1) : s;
 }

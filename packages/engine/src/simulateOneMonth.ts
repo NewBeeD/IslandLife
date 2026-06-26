@@ -8,6 +8,10 @@ import { governmentAct } from './government';
 import { computeLegacyIncrement } from './legacy';
 import { updateMarketPrice } from './market';
 
+// Consecutive unmet-payment months before the player's loans fall into default
+// (Phase 7). NPCs default on the first month they cannot cover (unchanged).
+const PLAYER_ARREARS_LIMIT = 3;
+
 // Mutable entity-graph model. Phases mutate the live world in place so a change
 // in one phase (a company closing, an agent losing a job, a loan defaulting) is
 // visible to every later phase by shared reference. Order is critical.
@@ -64,10 +68,29 @@ export function simulateOneMonth(world: WorldState): WorldState {
     // does not accumulate unboundedly (a crude consumption model for the slice).
     const surplus = Math.max(0, income - agent.monthlyLivingCosts);
     const spending = agent.monthlyLivingCosts + 0.5 * surplus;
-    const newCash = agent.cash + income - personalLoanPayments - spending;
-    if (newCash < 0 && agent.loans.some((l) => l.status === 'ACTIVE')) {
+    // Fuel/upkeep on owned equipment (Phase 7) — 0 for everyone without an upgrade,
+    // so NPC and default-player cash math is unchanged (the digest holds).
+    const operating = agent.monthlyOperatingCosts ?? 0;
+    const newCash = agent.cash + income - personalLoanPayments - spending - operating;
+    const hasActiveLoan = agent.loans.some((l) => l.status === 'ACTIVE');
+
+    if (agent.isPlayer && hasActiveLoan) {
+      // The player draws down savings through lean spells and only defaults after a
+      // run of months they cannot cover — a softer path than the NPC instant
+      // default, so a seasonal trade with a loan is survivable, not a trap.
+      if (newCash < 0) {
+        agent.loanArrearsMonths = (agent.loanArrearsMonths ?? 0) + 1;
+        if (agent.loanArrearsMonths >= PLAYER_ARREARS_LIMIT) {
+          triggerPersonalLoanDefault(agent);
+          agent.loanArrearsMonths = 0;
+        }
+      } else {
+        agent.loanArrearsMonths = 0; // caught up
+      }
+    } else if (newCash < 0 && hasActiveLoan) {
       triggerPersonalLoanDefault(agent);
     }
+
     agent.cash = Math.max(newCash, 0);
   }
 

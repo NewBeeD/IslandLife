@@ -9,8 +9,13 @@ of work with an acceptance test, the files it touches, and its dependencies.
 - **Current state:** Phases 0–6 complete (scaffold, headless engine, persistence,
   character creation, the Fastify API + iceberg projection + template narrative
   + React/Vite client, the Layer-2 Claude Opus 4.8 narrative, and the vertical
-  slice — one unlabelled decision loop with a delayed consequence). Next: the
-  post-slice backlog (P-B1 firm formation onward).
+  slice — one unlabelled decision loop with a delayed consequence). **Phase 7 (in
+  progress):** grounded character creation, the generative opportunity + bank
+  financing system, and a real money view. **Next (Phases 8–11) — the diversified
+  economy:** a portfolio of concurrent ventures (the income spine), education &
+  credentials, cross-domain opportunities + saturating side hustles, and
+  equity/crowdfunding/NPC partnerships. Then the post-slice backlog (P-B1 firm
+  formation onward).
 
 ## How to read this
 
@@ -280,6 +285,349 @@ These are the guardrails I follow on every change; they're not steps, they're co
 
 ---
 
+## Phase 7 — Grounded life, generative opportunities, real money 🔨 IN PROGRESS
+
+> Goal: ground character creation in everyday small-island livelihoods; make
+> opportunities **always available** for the player's trade at varying risk and
+> financing (a fisher can always pursue a bigger boat + engine, funded by savings
+> and/or a bank loan); and let the player **see their own finances** — assets,
+> loans, monthly interest, net worth.
+
+> **S3 amendment (scoped, deliberate).** The iceberg still holds for *other people
+> and the world* — NPC psychology (OCEAN, capitals, tendencies), opportunity
+> `expectedReturn`, hidden `riskLevel`, NPC loan internals never cross the wire.
+> But the player may now see **their own** money in full: their loan's
+> `interestRate`, asset values, and a computed `netWorth`. `netWorth` is still
+> **derived in the projection, never stored** (S4 holds). The iceberg-leak test is
+> re-scoped to encode exactly this split, not deleted. This partially lands the
+> player-loan slice of **P-B3 — Banking depth**.
+
+- **P7.1 — Eight grounded livelihoods.** Expand `FamilyBackground` (4 → 8) mapped
+  onto the 8 `Industry` values; widen the creation `ForkOption` to `A`–`H` (only
+  the `background` fork uses E–H); add the four new `fork1` cases + `FAMILY_INDUSTRY`
+  entries (minibus driver → TRANSPORTATION, mason → CONSTRUCTION, guesthouse →
+  TOURISM, shopkeeper → RETAIL); give the web `background` fork eight concrete,
+  Dominica-specific prose options. *Files:* `shared/enums.ts`,
+  `engine/characterCreation/forks.ts`, `web/views/CharacterCreation.tsx`.
+  *Acceptance:* each background hydrates the right occupation/knowledge; choosing
+  any of the eight begins a coherent life; no-choices golden master unchanged.
+
+- **P7.2 — Real money view (the S3 amendment).** `MoneyDTO` gains per-asset `value`,
+  per-loan `interestRate` + `principal` + next-payment interest/principal split, a
+  top-level computed `netWorth`, and a `monthlyOperatingCosts` expense line.
+  *Files:* `shared/dto.ts`, `server/projection/money.ts`, `web/views/Money.tsx`,
+  `web/styles.css`. *Acceptance:* the Money view shows the player's loan interest
+  rate, asset values, and net worth; the re-scoped iceberg test passes (money DTO
+  may carry `interestRate`/`netWorth`; every other DTO still may not, and
+  `expectedReturn`/`riskLevel`/NPC mechanics leak nowhere).
+
+- **P7.3 — Player economic fields + seasonal lean months.** Add `outputScale` (1),
+  `monthlyOperatingCosts` (0), `loanArrearsMonths` (0) to `NPCAgent`, defaulted so
+  NPCs and a no-upgrade player are byte-identical (S2). `updatePlayerIncome` earns
+  `spotBaseIncome * outputScale * seasonalMarketFactor` (seasonality already lives
+  in `Good.seasonality`), so off-season income drops while fixed loan + operating
+  costs stay → genuine cash-negative spells. `simulateOneMonth` phase 5 subtracts
+  operating costs (0 for NPCs); the **player** accrues `loanArrearsMonths` and draws
+  down cash before defaulting (instant default replaced for the player only).
+  *Files:* `shared/types.ts`, `engine/{opportunities,simulateOneMonth,
+  characterCreation/hydrate,serialize}.ts`. *Acceptance:* a bigger-boat fisher runs
+  positive in season and negative off-season; arrears accrue before default; engine
+  digest unchanged.
+
+- **P7.4 — Generative upgrade opportunities.** Broaden `OpportunityKind` with
+  `ASSET_UPGRADE`; generalize `Opportunity` with optional upgrade fields
+  (`assetType`, `assetPrice`, `outputScaleDelta`, `operatingCostDelta`, hidden
+  `riskLevel`, `minCash`/`minExperience`). A per-industry catalogue (fishing → boat
+  + engine, farming → land/irrigation/pickup, transport → second minibus,
+  construction → tools/crew, retail → fridge/stock, tourism → rooms, trade → bulk
+  run) at 1–2 risk/capital tiers. `surfaceOpportunities` guarantees the player's
+  trade always has an open upgrade (cooldown after decline/expire), drawn from
+  `world.rng`, gated by capital/experience. *Files:* `shared/types.ts`,
+  `engine/opportunities.ts`. *Acceptance:* a fishing player always has a bigger-boat
+  opportunity in `GET /opportunities`; higher tiers gate on capital/experience; the
+  Eunice path is untouched.
+
+- **P7.5 — Bank financing (credit, amortization, counter-offers).** `banking.ts`
+  gains `amortize(principal, rate, term)`, `assessLoanApplication(world, applicant,
+  requestedPrincipal, downPayment, termMonths)` → `{ outcome:
+  APPROVED|COUNTER|DECLINED, approvedPrincipal, interestRate, monthlyPayment, term,
+  reason }` from hidden creditworthiness (job stability, cash, asset value, DTI,
+  institutional capital, kept/broken promises, bank appetite/state/bias, base rate),
+  and `originateLoan(...)`. **Apply-and-find-out:** no raw score shown; an over-ask
+  returns a `COUNTER` with the creditworthiness ceiling ("the bank offers you a
+  lesser amount"); declines carry a plain reason. *Files:* `engine/banking.ts`.
+  *Acceptance:* strong applicants get full approval at a lower rate; weak applicants
+  are countered down or declined with a readable reason; payments amortize correctly.
+
+- **P7.6 — Financing slider + quote flow (interactive decision).** `DecisionDTO`
+  gains `interaction: 'OPTIONS' | 'FINANCING'` + a `FinancingControlDTO` (price,
+  max/min down-payment, term options); add `FinancingQuoteDTO`. New read-only
+  `POST /saves/:id/decisions/:did/quote { downPayment, termMonths }` returns a live
+  quote (loan size, monthly payment, approve/counter/decline) the slider polls;
+  `POST /decisions/:did` accepts `{ financing }`, re-quotes server-side
+  (authoritative), and `resolveDecision` deducts the down payment, originates the
+  approved loan, pushes the `Asset`, and bumps `outputScale`/operating costs.
+  *Files:* `shared/dto.ts`, `engine/opportunities.ts`, `server/app.ts`,
+  `server/projection/{opportunities,decisions}.ts`, `web/views/Opportunities.tsx`,
+  `web/api/client.ts`, `web/styles.css`. *Acceptance:* dragging the down-payment
+  slider updates loan size / monthly payment / approval live; accepting buys the
+  asset, books the loan, and the Money view reflects all of it next month.
+
+- **P7.7 — Upgrade narrative.** `narrative/decisions.ts` frames the `ASSET_UPGRADE`
+  choice and its trade-off in voice, acknowledges the purchase/loan, and renders a
+  delayed `MEMORY` entry on how the season treated the bet — second person, no raw
+  mechanics (S7). *Acceptance:* the upgrade situation, acknowledgement, and
+  consequence all pass the voice validator.
+
+- *Phase acceptance:* `npm run typecheck && npm run typecheck:web && npm test` green
+  (determinism digest unchanged; re-scoped iceberg test passing); end-to-end with
+  `serve` + `dev:web`, a fishing life buys a bigger boat on a part-cash/part-loan
+  deal via the slider and rides a negative off-season month against the payment.
+
+---
+
+## Phase 8 — A portfolio of ventures (the income spine) 🔜 PLANNED
+
+> Goal: the player stops being one-occupation / one-income and becomes a set of
+> **concurrent ventures**, each with its own assets, output, operating cost, and
+> income, summed each month. A lecturer can draw a salary *and* run a boat *and*
+> sell juice. Everything in Phases 9–11 (education unlocks, cross-domain entry,
+> side hustles, partnerships) hangs off this.
+>
+> **Determinism note (S2 / P-X2).** New venture state is additive and optional: a
+> player with no explicit `ventures` keeps the current single-stream behaviour
+> **byte-identically**, so the no-choices golden master is untouched. Any digest
+> change appears only once a real venture exists, and is committed deliberately
+> with a note.
+
+- **P8.1 — Venture data model.** Add a `Venture` interface to `@island/shared`
+  (`{ id, industry, label, incomeMode: 'SPOT' | 'STANDING', spotBaseIncome,
+  standingContract, outputScale, monthlyOperatingCosts, assets: Asset[], status }`)
+  and an optional `ventures?: Venture[]` on `NPCAgent`. The existing player income
+  fields (`incomeMode`/`spotBaseIncome`/`standingContract`/`outputScale`/
+  `monthlyOperatingCosts`) remain the implicit "venture 0" when `ventures` is
+  undefined. *Files:* `shared/types.ts`, `engine/serialize.ts`. *Acceptance:*
+  ventures round-trip through serialize; a player with no `ventures` produces the
+  unchanged determinism digest.
+
+- **P8.2 — Income aggregation.** Generalize `updatePlayerIncome` to compute each
+  venture's income (the existing SPOT/STANDING logic, per venture) and sum them
+  into `player.monthlyIncome`; `simulateOneMonth` phase 5 sums operating costs
+  across ventures. When `ventures` is empty/undefined the code path is the current
+  single-stream one (byte-identical). *Files:* `engine/ventures.ts` (new, pure, S1),
+  `engine/opportunities.ts`, `engine/simulateOneMonth.ts`. *Acceptance:* a
+  two-venture player's monthly income equals the sum of both; the no-venture golden
+  master holds.
+
+- **P8.3 — Upgrades target a venture.** Generalize the upgrade catalogue and
+  `nextUpgradeFor`/`applyUpgradeFinancing` to operate **per venture** (a fisher's
+  boat venture and a taxi venture each carry their own upgrade ladder and
+  experience gate); financing bumps that venture's `outputScale`/operating cost and
+  pushes the asset onto it. *Files:* `engine/opportunities.ts`, `shared/types.ts`.
+  *Acceptance:* upgrading the taxi venture leaves the fishing venture untouched; the
+  per-venture experience gate still applies.
+
+- **P8.4 — Money view by venture.** `MoneyDTO` income/expense lines break down per
+  venture (label + its net contribution); no hidden mechanics added. *Files:*
+  `shared/dto.ts`, `server/projection/money.ts`, `web/views/Money.tsx`,
+  `web/styles.css`. *Acceptance:* the Money view shows each venture's contribution
+  and they reconcile to phase-5 cash math; the iceberg test stays green.
+
+- **P8.5 — Experience per active venture.** `simulateOneMonth` phase 9 credits
+  experience to **every** active venture's domain, not only `player.occupation`.
+  Guarded so the no-venture player still credits exactly one domain (digest holds).
+  *Files:* `engine/simulateOneMonth.ts`. *Acceptance:* running two ventures grows
+  two experience domains; the single-occupation path is unchanged.
+
+- *Phase acceptance:* `npm run typecheck && npm run typecheck:web && npm test`
+  green; a fishing player who also runs a taxi sees two income lines that sum on the
+  Money view; the determinism digest is updated **once, with a note**, and only the
+  with-ventures path moves it.
+
+---
+
+## Phase 9 — Education & credentials 🔜 PLANNED
+
+> Goal: the player can invest **money + time** in education (certificate →
+> associate → degree → master's), which raises knowledge / cultural capital and
+> **unlocks gated opportunities**. The cleanest, most self-contained phase — the
+> substrate (`knowledge`, `culturalCapital`, `generalLiteracy`) already exists.
+>
+> **Depends on:** nothing in Phases 8/10/11 (can ship independently), but its
+> credential gates (P9.4) are what make Phase 10's higher-value ventures meaningful.
+
+- **P9.1 — Credential model.** Add a `CredentialLevel` enum (`NONE`, `CERTIFICATE`,
+  `ASSOCIATE`, `DEGREE`, `MASTERS`) and optional `education?: { level: CredentialLevel;
+  enrolled?: { programId; field: Industry | 'GENERAL'; targetLevel; monthsRemaining;
+  monthlyCost; completionMonth } }` on `NPCAgent`. Optional/defaulted → the
+  no-education player is byte-identical. *Files:* `shared/enums.ts`,
+  `shared/types.ts`, `engine/serialize.ts`. *Acceptance:* education round-trips; the
+  default player carries `NONE`/no program and the digest is unchanged.
+
+- **P9.2 — Enrolment as an opportunity.** New `OpportunityKind` `'EDUCATION_ENROLMENT'`;
+  a program catalogue (field, target level, prerequisite level, total cost, duration
+  in months). Surfaced when affordable, not already enrolled, and not already
+  holding the level — drawn from `world.rng` for variety (S2). Resolving commits the
+  program onto `education.enrolled`. *Files:* `shared/types.ts`,
+  `engine/opportunities.ts`. *Acceptance:* an enrolment offer appears for an
+  eligible player; accepting starts the program; you cannot enrol in a level you
+  already hold.
+
+- **P9.3 — Tuition & completion in the loop.** `simulateOneMonth` phase 5 subtracts
+  `monthlyCost` while enrolled (so a degree is a real multi-month cash drain); at
+  `completionMonth` it raises the relevant `knowledge` domain + `generalLiteracy` +
+  `culturalCapital`, advances `education.level`, clears the program, and flags a
+  narrative trigger. *Files:* `engine/simulateOneMonth.ts`. *Acceptance:* tuition
+  drains cash monthly; on completion knowledge rises and the level advances; the
+  no-education path is unchanged.
+
+- **P9.4 — Credential-gated opportunities.** Add optional `minCredential` /
+  `minKnowledge` gates to opportunity + venture templates; `surfaceOpportunities`
+  enforces them. A degree unlocks higher-value (e.g. formal-sector) ventures that
+  stay hidden without it. *Files:* `engine/opportunities.ts`. *Acceptance:* a gated
+  opportunity is absent before the credential and surfaces after it is earned.
+
+- **P9.5 — Education narrative + money view.** `narrative/decisions.ts` frames the
+  enrol decision and renders a completion `MEMORY` entry (second person, no raw
+  mechanics, S7); `MoneyDTO` shows a tuition expense line while enrolled. *Files:*
+  `narrative/decisions.ts`, `shared/dto.ts`, `server/projection/money.ts`,
+  `web/views/{Money,Opportunities}.tsx`. *Acceptance:* the tuition line shows while
+  enrolled; the enrol and completion prose pass the voice validator.
+
+- *Phase acceptance:* a lecturer pays for a master's over its duration, cash dips
+  each month, and on completion a credential-gated venture opportunity opens that
+  was previously hidden; iceberg clean; digest updated with a note.
+
+---
+
+## Phase 10 — Diversified opportunities, side hustles & saturation 🔜 PLANNED
+
+> Goal: opportunities reach **beyond the player's trade** (buy a boat or run a bus
+> whatever your job); **low-barrier side hustles** exist but **saturate** as more
+> people pile in; **more capital unlocks more**. This is where the world starts to
+> feel like an open economy rather than a single career.
+>
+> **Depends on:** Phase 8 (a new opportunity creates a new `Venture`). Saturation
+> reads the live agent population that already exists in `world.agents`.
+
+- **P10.1 — New-venture opportunities (cross-domain).** New `OpportunityKind`
+  `'NEW_VENTURE'`: a catalogue of entry opportunities across **all** industries
+  (start a fishing venture, buy a minibus route, open a juice stand), each with an
+  entry cost, starting output, operating cost, and barrier tier. Surfacing offers
+  ventures the player does **not** already run, gated by cash / credential, drawn
+  from `world.rng`. Resolving creates a `Venture` (Phase 8), funded by cash and/or a
+  bank loan through the existing financing slider (P7.6). *Files:* `shared/types.ts`,
+  `engine/opportunities.ts`. *Acceptance:* a lecturer is offered a boat venture;
+  accepting adds a fishing venture that earns alongside the salary.
+
+- **P10.2 — Side hustles (low barrier).** Tag catalogue entries with
+  `barrierTier: 'LOW' | 'MEDIUM' | 'HIGH'`. Low-barrier hustles (roadside juice,
+  small resale) are cheap, fast to start, and **always** offerable — but their
+  return is saturation-scaled (P10.3). *Files:* `shared/types.ts`,
+  `engine/opportunities.ts`. *Acceptance:* a near-free juice-stand venture is always
+  available to offer; its base return is deliberately modest.
+
+- **P10.3 — Saturation.** Recompute, as a monthly **aggregate** (S5), the
+  participation per `(industry × parish × barrierTier)` from `world.agents` +
+  player ventures, and scale a low-barrier venture's income inversely with crowding
+  (more entrants → lower per-head take, recovering as they leave). All draws via
+  `world.rng` (S2). *Files:* `engine/ventures.ts`, `engine/simulateOneMonth.ts`,
+  `shared/types.ts`. *Acceptance:* a juice-stand return falls as agents crowd in and
+  recovers as they leave; the result is deterministic per seed.
+
+- **P10.4 — Wealth-gated surfacing.** Generalize the surfacing gate with a
+  `minCash` threshold so higher-capital ventures only surface once the player can
+  plausibly fund them. *Files:* `engine/opportunities.ts`. *Acceptance:* a
+  high-capital venture is hidden when the player is broke and surfaces once liquid.
+
+- **P10.5 — Market visibility (scoped).** Decide *buy/sell* vs. *abstracted*.
+  **Minimal (this phase):** surface the local market prices the player's SPOT
+  ventures already read (`updatePlayerIncome`), so the player can see why a venture's
+  income swings. **Fuller (deferred):** player inventory + explicit buy/sell actions
+  — noted as a later prompt, not built here. *Files:* `server/projection/*`,
+  `web/views/*`. *Acceptance:* relevant market prices are visible and tied to venture
+  income; explicit trading is documented as deferred.
+
+- **P10.6 — Diversification narrative.** `narrative/decisions.ts` frames
+  cross-domain entry and the "everybody's selling juice now" saturation beat; the
+  Opportunities view groups offers by domain and conveys barrier / crowding **in
+  prose, never as a stat** (S3). *Files:* `narrative/decisions.ts`,
+  `web/views/Opportunities.tsx`. *Acceptance:* the prose passes the voice validator;
+  no raw saturation number crosses the wire.
+
+- *Phase acceptance:* a lecturer simultaneously runs salary + a boat venture + a
+  saturating juice hustle; wealthier players see bigger plays unlock; iceberg clean;
+  digest updated with a note.
+
+---
+
+## Phase 11 — Equity, crowdfunding & NPC partnerships 🔜 PLANNED
+
+> Goal: raise money from **friends** (NPCs in the social network) as **debt or
+> equity**, and **partner with NPCs** in a shared company that splits debt and
+> income. This introduces the one genuinely new financial concept — a **cap table /
+> profit share**. (Partnering with *other human players* stays deferred to P-B10.)
+>
+> **Depends on:** Phase 8 (ventures hold the equity split) and the banking flow
+> (P7.5) for friend-loans. Reuses `socialNetwork`, NPC `cash`, and the
+> personality fields (`agreeableness`/`riskTolerance`/`patience`) already on agents.
+
+- **P11.1 — Equity / cap table.** Add optional `equityHolders?: { personId; share }[]`
+  to `Venture` (and `Company`); outside shares sum to ≤ 1, the player holds the
+  remainder. Monthly venture income distributes by share — the player banks only
+  their slice. Optional/defaulted → sole ventures are byte-identical. *Files:*
+  `shared/types.ts`, `engine/ventures.ts`, `engine/serialize.ts`. *Acceptance:* a
+  venture with a 30% outside holder pays the player 70% of its take; a sole venture
+  is unchanged and the digest holds.
+
+- **P11.2 — Crowdfunding offers.** New `OpportunityKind` `'CROWDFUND'`: when the
+  player needs capital, generate a slate of offers from `socialNetwork` NPCs. Each
+  backer's terms derive from their personality + cash — a **loan** at an interest
+  rate, or **equity** for a profit share. *Files:* `shared/types.ts`,
+  `engine/opportunities.ts`, `engine/banking.ts` (reuse `amortize`/`originateLoan`
+  with `borrowerPersonId` for friend-loans). *Acceptance:* a player with friends
+  gets a mixed slate of interest-rate and equity offers whose terms vary by backer.
+
+- **P11.3 — Accept funding.** Resolving a `CROWDFUND` decision either originates a
+  personal loan from the friend (debt: their cash → player, a `Loan` booked) or
+  records an `equityHolder` on the funded venture (equity: their cash → player, a
+  future profit claim that dilutes the player's take). *Files:*
+  `engine/opportunities.ts`, `engine/ventures.ts`. *Acceptance:* taking a friend's
+  loan adds the loan and their cash; taking equity adds a holder + their cash and
+  reduces the player's future share.
+
+- **P11.4 — NPC partnership (shared firm).** New `OpportunityKind` `'PARTNERSHIP'`:
+  form a shared `Company` (`COOPERATIVE`/`ASSOCIATION`) with an NPC partner who
+  contributes cash/assets for a share; capital is pooled, any loan is booked against
+  the company (`borrowerCompanyId`), and monthly profit splits by share. *Files:*
+  `shared/types.ts`, `engine/company.ts`, `engine/opportunities.ts`. *Acceptance:*
+  forming a partnership pools capital, books the loan against the company, and
+  splits monthly profit by share.
+
+- **P11.5 — Backer & partner consequences.** Backers/partners react over time: a
+  good run pays them and lifts the player's `socialCapitalLocal`; a default or a
+  sustained loss strains the relationship (`brokenContracts++`, social-capital hit)
+  and surfaces as a delayed `MEMORY`. *Files:* `engine/simulateOneMonth.ts`,
+  `engine/opportunities.ts`, `narrative/decisions.ts`. *Acceptance:* paying backers
+  raises local social capital; defaulting on a friend's loan costs it; the
+  consequence surfaces in voice on schedule.
+
+- **P11.6 — Funding/partnership money view + narrative.** `MoneyDTO` shows the
+  player's ownership share, outside equity claims, and friend-loan terms (the
+  player's **own** debt is visible per the P7 S3 amendment; backers' hidden
+  psychology is not). `narrative/decisions.ts` frames raising money from friends and
+  forming the partnership. *Files:* `shared/dto.ts`, `server/projection/money.ts`,
+  `web/views/{Money,Opportunities}.tsx`, `narrative/decisions.ts`. *Acceptance:* the
+  player sees their ownership %, friend-loan rates, and partner; NPC internals never
+  leak.
+
+- *Phase acceptance:* a player funds a bigger boat by raising EC$ from three
+  friends (two for interest, one for a profit share), **or** partners with an NPC in
+  a shared fishing co-op; income splits accordingly; a later default strains the
+  friendship and surfaces as a memory; iceberg clean; digest updated with a note.
+
+---
+
 ## Cross-cutting prompts (do alongside the phases)
 
 - **P-X1 — Iceberg-leak contract test.** Snapshot every API DTO; assert it contains
@@ -303,7 +651,9 @@ Sequenced roughly; each is additive on the proven foundation.
 - **P-B2 — Full NPC decision engine.** Prospect theory + probability weighting +
   time discounting (Kahneman/Tversky, Prelec) replacing the Phase-1 stub.
 - **P-B3 — Banking depth.** `computeLoanInterestRate` (risk-priced, cultural-capital
-  bias), player loan applications, collateral, the bank-distress cascade.
+  bias), player loan applications, collateral, the bank-distress cascade. *(Player
+  loan applications + risk-priced rates land in Phase 7 / P7.5; collateral and the
+  fuller distress cascade remain here.)*
 - **P-B4 — Migration.** The Barbados move as a real second world; the Dominica
   simulation continues in the player's absence.
 - **P-B5 — Business acquisition & leverage.** Earnings-based valuation, buyouts,
@@ -317,7 +667,10 @@ Sequenced roughly; each is additive on the proven foundation.
   generational handoff.
 - **P-B9 — Rust hot-loop port** (only if Node becomes the bottleneck) behind the
   unchanged `simulateOneMonth` interface.
-- **P-B10 — Accounts & multiplayer economy** (the largest upgrade; deferred by design).
+- **P-B10 — Accounts & multiplayer economy** (the largest upgrade; deferred by
+  design). Partnering and crowdfunding with **other human players** (vs. the NPC
+  partnerships/backers built in Phase 11) lands here, along with a shared world and
+  reconciled decision streams.
 
 ---
 

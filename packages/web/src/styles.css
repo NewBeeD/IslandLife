@@ -277,6 +277,18 @@ button:disabled {
 .money__line--debt {
   flex-wrap: wrap;
 }
+.money__line--debt .muted {
+  flex-basis: 100%;
+  text-align: right;
+}
+.money__networth {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1.1rem;
+  padding: 0.6rem 0;
+  margin-top: 0.4rem;
+  border-top: 2px solid var(--line);
+}
 .money__delta {
   display: flex;
   justify-content: space-between;
@@ -376,6 +388,85 @@ button:disabled {
   color: var(--muted);
   font-size: 0.9rem;
   padding: 0.2rem 0;
+}
+
+/* Financing slider (asset upgrades) */
+.financing {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.financing__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  font-size: 1.05rem;
+}
+.financing__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.95rem;
+}
+.financing__field input[type='range'] {
+  width: 100%;
+  accent-color: var(--sea);
+}
+.financing__field select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--paper);
+  font: inherit;
+}
+.financing__quote {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.7rem 0.9rem;
+  background: var(--paper);
+}
+.financing__quote--declined {
+  border-color: var(--neg);
+}
+.financing__quote--counter {
+  border-color: #b8860b;
+}
+.financing__quote--approved {
+  border-color: var(--pos);
+}
+.financing__line {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.15rem 0;
+}
+.financing__reason {
+  margin: 0.5rem 0 0;
+  line-height: 1.5;
+  font-size: 0.92rem;
+}
+.financing__reason--declined {
+  color: var(--neg);
+}
+.financing__reason--approved {
+  color: var(--pos);
+}
+.financing__counter {
+  margin-top: 0.6rem;
+  width: 100%;
+  text-align: left;
+  background: #fdf6e3;
+  border: 1px solid #b8860b;
+  border-radius: 4px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.financing__actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 /* Advance */

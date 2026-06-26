@@ -88,7 +88,12 @@ export function deserializeWorld(s: SerializedWorld): WorldState {
   // Pass 1: rebuild agents and companies with their object refs nulled/empty.
   const agents: NPCAgent[] = s.agents.map((sa) => {
     const { employerId: _drop, ...rest } = sa;
-    return { ...clone(rest), employer: null } as NPCAgent;
+    const agent = { ...clone(rest), employer: null } as NPCAgent;
+    // Backfill Phase 7 fields for snapshots written before they existed.
+    agent.outputScale ??= 1;
+    agent.monthlyOperatingCosts ??= 0;
+    agent.loanArrearsMonths ??= 0;
+    return agent;
   });
   const companies: Company[] = s.companies.map((sc) => {
     const { employeeIds: _drop, ...rest } = sc;

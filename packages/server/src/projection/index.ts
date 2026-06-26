@@ -8,4 +8,4 @@ export { toMoneyDTO } from './money';
 export { toFeedDTO } from './feed';
 export { toCommunityDTO } from './community';
 export { toOpportunitiesDTO } from './opportunities';
-export { toDecisionDTO } from './decisions';
+export { toDecisionDTO, toFinancingQuoteDTO } from './decisions';

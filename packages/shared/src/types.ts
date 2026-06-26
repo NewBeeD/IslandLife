@@ -186,6 +186,19 @@ export interface NPCAgent {
   // The income level spot-selling reverts to as a base (SPOT mode), captured when
   // the player chose to keep selling on the open market.
   spotBaseIncome?: number;
+
+  // ── Phase 7: asset upgrades, operating costs, loan arrears ──────────────────
+  // All optional with engine defaults (outputScale 1, the rest 0) so existing NPCs
+  // and a no-upgrade player are byte-identical and the determinism digest holds.
+  // outputScale multiplies self-employed catch/output after an equipment upgrade
+  // (a bigger boat lands more fish). monthlyOperatingCosts is the fixed fuel/upkeep
+  // an owned asset adds each month, paid in good months and lean. loanArrearsMonths
+  // counts consecutive months the player could not fully meet loan payments — the
+  // player draws down cash and accrues arrears before a default (a softer path than
+  // the NPC instant-default, applied to the player only).
+  outputScale?: number;
+  monthlyOperatingCosts?: number;
+  loanArrearsMonths?: number;
 }
 
 export interface ActivePolicy {
@@ -233,21 +246,40 @@ export interface LegacyScore {
 // only prose + neutral option text — `monthlyAmount`, `expectedReturn`, and the
 // option `effect` never cross the wire (S3, the iceberg).
 
-export type OpportunityKind = 'EUNICE_SUPPLY_CONTRACT';
+export type OpportunityKind = 'EUNICE_SUPPLY_CONTRACT' | 'ASSET_UPGRADE';
 export type OpportunityStatus = 'OPEN' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
+
+// The hidden spec of an asset-upgrade opportunity (Phase 7). A bigger boat, a
+// second minibus, more guest rooms — capital up front (cash and/or a financed
+// loan) for more output and more fixed cost. `riskLevel` is hidden (never
+// projected); the player reads the trade-off in prose and chooses how much to
+// borrow on the financing slider.
+export interface UpgradeSpec {
+  id: string; // stable rung identity (also the bought asset's id, so it is not re-offered)
+  assetType: 'LAND' | 'EQUIPMENT' | 'VEHICLE';
+  assetSize?: 'SMALL' | 'MEDIUM' | 'LARGE';
+  assetLabel: string; // "a bigger pirogue and a new outboard engine"
+  assetPrice: number; // EC$ full cost
+  outputScaleDelta: number; // +0.6 → 60% more catch/output
+  operatingCostDelta: number; // +EC$/month fuel & upkeep the asset adds
+  riskLevel: 'LOW' | 'MEDIUM' | 'MEDIUM_HIGH' | 'HIGH'; // hidden
+  minTermMonths: number;
+  maxTermMonths: number;
+}
 
 export interface Opportunity {
   id: string;
   kind: OpportunityKind;
   industry: Industry;
-  npcName: string; // "Eunice Charles" — the person behind the offer
+  npcName: string; // "Eunice Charles" — the person/vendor behind the offer
   channelId: string; // the information channel that surfaced it (MARKET_NETWORK)
   surfacedMonth: number;
   windowMonths: number; // months the offer stays open before it expires
   status: OpportunityStatus;
   decisionId: string; // the PlayerDecision presenting this opportunity
   // Hidden mechanics — never projected raw.
-  monthlyAmount: number; // EC$ the standing arrangement guarantees
+  monthlyAmount: number; // EC$ the standing arrangement guarantees (Eunice; 0 for upgrades)
+  upgrade?: UpgradeSpec; // present for ASSET_UPGRADE opportunities
 }
 
 // One unlabelled option. `label`/`description` are neutral player-facing prose (no

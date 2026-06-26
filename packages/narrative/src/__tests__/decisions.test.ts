@@ -3,11 +3,12 @@ import {
   EUNICE_DECISION_ID,
   EUNICE_OPTION_ACCEPT,
   EUNICE_OPTION_DECLINE,
+  applyUpgradeFinancing,
   buildWorld,
   resolveDecision,
   surfaceOpportunities,
 } from '@island/engine';
-import type { WorldState } from '@island/shared';
+import type { PlayerDecision, WorldState } from '@island/shared';
 import {
   buildDecisionSituation,
   buildDecisionAcknowledgement,
@@ -23,6 +24,22 @@ function fishingWorldWithOffer(seed = 11): WorldState {
   world.month = 3;
   surfaceOpportunities(world);
   return world;
+}
+
+function fisherWithUpgradeOffer(seed = 21): { world: WorldState; decision: PlayerDecision } {
+  const world = buildWorld(seed, { population: 60 });
+  const p = world.player;
+  p.occupation = 'FISHING';
+  p.employmentStatus = 'SELF_EMPLOYED';
+  p.parish = 'SAINT_JOHN';
+  p.socialCapitalLocal = 0.1; // only the upgrade surfaces, not Eunice
+  p.experience.fishing = 0.3;
+  p.monthlyIncome = 1600;
+  p.cash = 12000;
+  world.month = 4;
+  surfaceOpportunities(world);
+  const decision = world.decisions.find((d) => d.kind === 'ASSET_UPGRADE')!;
+  return { world, decision };
 }
 
 describe('P6.2 — the decision interface reads as a moment, not a form', () => {
@@ -50,6 +67,36 @@ describe('P6.2 — the decision interface reads as a moment, not a form', () => 
     resolveDecision(decline, EUNICE_DECISION_ID, EUNICE_OPTION_DECLINE);
     const d = buildDecisionAcknowledgement(decline, decline.decisions[0]!);
     expect(d).toMatch(/wharf/);
+  });
+});
+
+describe('Phase 7 — the asset-upgrade decision reads in voice and leaks no mechanics', () => {
+  it('frames the bigger-boat choice and its trade-off without risk labels', () => {
+    const { world, decision } = fisherWithUpgradeOffer();
+    const situation = buildDecisionSituation(world, decision);
+    expect(situation.toLowerCase()).toContain('you');
+    // The genuine trade-off — more output vs. heavier fixed costs — is in the prose.
+    expect(situation.toLowerCase()).toMatch(/more|cost|month/);
+    expect(situation).not.toMatch(/expected|probability|risk level|outputScale|%/i);
+  });
+
+  it('acknowledges the purchase without judging it', () => {
+    const { world, decision } = fisherWithUpgradeOffer();
+    applyUpgradeFinancing(world, decision.id, 6000, 48);
+    const ack = buildDecisionAcknowledgement(world, decision);
+    expect(ack.toLowerCase()).toContain('your');
+    expect(ack).not.toMatch(/right|wrong|good choice|bad choice/i);
+  });
+
+  it('lands a valid MEMORY consequence that never names the choice', () => {
+    const { world, decision } = fisherWithUpgradeOffer();
+    applyUpgradeFinancing(world, decision.id, 6000, 48);
+    world.month = decision.consequenceMonth!;
+    const entry = generateConsequenceEntry(world, decision);
+    expect(entry.type).toBe('MEMORY');
+    const result = validateNarrativeEntry(entry.text, 'ANNUAL_REFLECTION');
+    expect(result.valid, result.issues.join('; ')).toBe(true);
+    expect(entry.text.toLowerCase()).not.toContain('decision');
   });
 });
 

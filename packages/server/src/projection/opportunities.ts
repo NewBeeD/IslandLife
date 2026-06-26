@@ -10,6 +10,7 @@ import type { Opportunity, OpportunitiesDTO, OpportunityDTO, WorldState } from '
 
 function titleFor(opp: Opportunity): string {
   if (opp.kind === 'EUNICE_SUPPLY_CONTRACT') return `Supply contract — ${opp.npcName}`;
+  if (opp.kind === 'ASSET_UPGRADE' && opp.upgrade) return `A bigger step — ${opp.upgrade.assetLabel}`;
   return opp.npcName;
 }
 
@@ -23,17 +24,34 @@ function descriptionFor(opp: Opportunity): string {
       `you to her stall.`
     );
   }
-  return 'An arrangement she has put to you.';
+  if (opp.kind === 'ASSET_UPGRADE' && opp.upgrade) {
+    // The price is public (the player can see the asking price); the risk and the
+    // expected return are not — those stay hidden. The player weighs it in prose.
+    return (
+      `${capitalise(opp.upgrade.assetLabel)} for ${formatCurrency(opp.upgrade.assetPrice)}. ` +
+      `More work when the work is there, and more cost every month whether it is or not. ` +
+      `You would put down what you can and borrow the rest.`
+    );
+  }
+  return 'An arrangement put to you.';
 }
 
 function sourceFor(opp: Opportunity): string {
+  if (opp.kind === 'ASSET_UPGRADE') return `Word: through ${opp.npcName}.`;
   return `Heard: directly from ${opp.npcName}.`;
 }
 
 function windowFor(opp: Opportunity, world: WorldState): string {
   const monthsLeft = opp.surfacedMonth + opp.windowMonths - world.month;
+  if (opp.kind === 'ASSET_UPGRADE') {
+    return monthsLeft <= 1 ? 'The offer holds only this month.' : 'It is there for now, but not forever.';
+  }
   if (monthsLeft <= 1) return 'She needs an answer this month.';
   return 'She is waiting on your word, but not forever.';
+}
+
+function capitalise(s: string): string {
+  return s.length > 0 ? s[0]!.toUpperCase() + s.slice(1) : s;
 }
 
 function toDTO(opp: Opportunity, world: WorldState): OpportunityDTO {

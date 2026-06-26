@@ -1,11 +1,16 @@
 import type { MoneyDTO } from '@island/shared';
 
-// The Money view. Deliberately simple: cash in hand, the month's income and
-// expense lines, the delta, assets, debts. No net worth, no interest rate, no
-// forecast — the player does their own mental accounting (Player Experience doc).
+// The Money view. Cash in hand, the month's income and expense lines, the delta,
+// and (Phase 7) the player's own books in full: asset values, each loan's interest
+// rate and interest/principal split, and net worth.
 function ec(amount: number): string {
+  if (!Number.isFinite(amount)) amount = 0; // never render EC$NaN
   const sign = amount < 0 ? '-' : '';
   return `${sign}EC$${Math.abs(Math.round(amount)).toLocaleString('en-US')}`;
+}
+
+function pct(rate: number): string {
+  return `${(rate * 100).toFixed(2)}%`;
 }
 
 export function Money({ money }: { money: MoneyDTO }) {
@@ -59,6 +64,7 @@ export function Money({ money }: { money: MoneyDTO }) {
           {money.assets.map((a, i) => (
             <div className="money__line" key={i}>
               <span>{a.label}</span>
+              <span>{ec(a.value)}</span>
               <span className="muted">{a.ownership}</span>
             </div>
           ))}
@@ -73,12 +79,20 @@ export function Money({ money }: { money: MoneyDTO }) {
               <span>{d.label}</span>
               <span>{ec(d.remaining)} remaining</span>
               <span className="muted">
-                {ec(d.monthlyPayment)}/month · {d.monthsLeft} months left
+                {ec(d.monthlyPayment)}/month at {pct(d.interestRate)} · {d.monthsLeft} months left
+              </span>
+              <span className="muted">
+                of which {ec(d.interestPortion)} interest, {ec(d.principalPortion)} principal
               </span>
             </div>
           ))}
         </section>
       )}
+
+      <div className="money__networth">
+        <span>Net worth</span>
+        <strong>{ec(money.netWorth)}</strong>
+      </div>
 
       {money.notes.map((n, i) => (
         <p className="money__note" key={i}>

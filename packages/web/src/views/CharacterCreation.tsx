@@ -8,7 +8,9 @@ import type { CreationChoicesInput } from '../api/client';
 // from island_life_character_creation.md; no mechanical effects are ever shown.
 
 type ForkKey = keyof CreationChoicesInput; // background | school | formative | tendency | situation
-type OptionId = 'A' | 'B' | 'C' | 'D';
+// The background fork offers eight grounded livelihoods (A–H); every other fork
+// offers four (A–D). OptionId spans the widest case.
+type OptionId = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H';
 
 interface ForkOption {
   id: OptionId;
@@ -46,6 +48,26 @@ const FORKS: Fork[] = [
         id: 'D',
         label: 'A trading family at the Roseau market',
         body: 'Your parents bought and sold things. Sometimes produce from the villages, sometimes goods from Martinique or St. Lucia. You grew up understanding that price is not fixed, that timing matters, and that the person who knows what something is worth before the seller does has an advantage.',
+      },
+      {
+        id: 'E',
+        label: 'A minibus driver’s family in Roseau',
+        body: 'Your father ran the bus on the west coast route, Roseau to Portsmouth and back, before light most mornings. You know the value of a full load and an empty seat, which conductor can be trusted with the day’s takings, and how a vehicle eats money the moment it leaves the yard. The road was the family business.',
+      },
+      {
+        id: 'F',
+        label: 'A mason’s family',
+        body: 'Your people build. Block, steel, concrete — your father and his brothers put up half the houses on the hill, and you carried mortar before you were tall enough to reach the scaffold. The work is hard and it comes and goes with the money in the country, but a good mason never starves for long. Your hands learned a trade early.',
+      },
+      {
+        id: 'G',
+        label: 'A guesthouse family',
+        body: 'Your mother kept a few rooms for visitors — birdwatchers, divers, the occasional cruise passenger who wanted the real island. You grew up making beds, cooking breakfast for strangers, and reading people quickly. You learned that a season can be fat or lean depending on things happening in countries you have never seen.',
+      },
+      {
+        id: 'H',
+        label: 'A shopkeeper’s family, village shop',
+        body: 'Your family ran the shop everyone in the village passed through — rice, salt fish, phone cards, cold drinks, and credit written in an exercise book. You learned arithmetic at the counter, who pays and who promises, and how a small margin on a lot of small things adds up. The shop never closed, and neither, it felt, did you.',
       },
     ],
   },

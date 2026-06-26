@@ -5,6 +5,7 @@ import type {
   DecisionDTO,
   DecisionResultDTO,
   FeedDTO,
+  FinancingQuoteDTO,
   MoneyDTO,
   OpportunitiesDTO,
   StateDTO,
@@ -69,6 +70,17 @@ export const api = {
   },
   resolveDecision(saveId: string, decisionId: string, optionId: string) {
     return post<DecisionResultDTO>(`/saves/${saveId}/decisions/${decisionId}`, { optionId });
+  },
+  quoteFinancing(saveId: string, decisionId: string, downPayment: number, termMonths: number) {
+    return post<FinancingQuoteDTO>(`/saves/${saveId}/decisions/${decisionId}/quote`, {
+      downPayment,
+      termMonths,
+    });
+  },
+  resolveFinancing(saveId: string, decisionId: string, downPayment: number, termMonths: number) {
+    return post<DecisionResultDTO>(`/saves/${saveId}/decisions/${decisionId}`, {
+      financing: { downPayment, termMonths },
+    });
   },
   advance(saveId: string) {
     return post<AdvanceResultDTO>(`/saves/${saveId}/advance`);

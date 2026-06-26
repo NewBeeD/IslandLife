@@ -75,6 +75,10 @@ const FAMILY_BACKGROUND_PROSE: Record<FamilyBackground, string> = {
   FARMING_INTERIOR: 'an interior farming family — provisions grounds and hard ground',
   CIVIL_SERVANT_ROSEAU: 'a Roseau civil-service household — salaried, formal, close to institutions',
   TRADING_ROSEAU: 'a Roseau trading family — buying and selling was the trade learned young',
+  MINIBUS_DRIVER: 'a minibus-driving family — the west-coast route and the daily takings were the household economy',
+  MASON_CONSTRUCTION: 'a family of masons — block, steel and concrete, work that came and went with the country’s money',
+  GUESTHOUSE_TOURISM: 'a guesthouse family — a few rooms for visitors, a living read off the seasons',
+  SHOPKEEPER_RETAIL: 'a shopkeeping family — the village shop, small margins and an exercise book of credit',
 };
 
 export function describeFamilyBackground(bg: FamilyBackground): string {
