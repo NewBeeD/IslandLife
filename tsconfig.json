@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@island/shared": ["packages/shared/src/index.ts"],
+      "@island/engine": ["packages/engine/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/src", "tools/*/src"],
+  // The web client is a DOM/JSX project with its own tsconfig (DOM lib, react-jsx).
+  // It is typechecked separately via `npm run typecheck:web`; excluding it here
+  // keeps the headless gate (engine/server/narrative/shared) on a Node-only lib.
+  "exclude": ["packages/web"]
+}

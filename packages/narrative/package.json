@@ -1,0 +1,14 @@
+{
+  "name": "@island/narrative",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.106.0",
+    "@island/shared": "*"
+  }
+}

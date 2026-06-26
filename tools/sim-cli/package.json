@@ -1,0 +1,13 @@
+{
+  "name": "@island/sim-cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "island-sim": "./src/run.ts"
+  },
+  "dependencies": {
+    "@island/engine": "*",
+    "@island/shared": "*"
+  }
+}

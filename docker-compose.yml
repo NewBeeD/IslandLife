@@ -1,0 +1,22 @@
+# Local Postgres for the persistence layer. `npm run db:up` to start, then
+# `npm run db:migrate`. Matches the default DATABASE_URL in .env.example.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: island_life_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: island_life
+    ports:
+      - '5432:5432'
+    volumes:
+      - island_life_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d island_life']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  island_life_pgdata:

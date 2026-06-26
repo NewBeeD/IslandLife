@@ -1,0 +1,36 @@
+{
+  "name": "island-life",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Island Life — a Dominica life & economics simulator. Simulation-first monorepo.",
+  "workspaces": [
+    "packages/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "sim": "tsx tools/sim-cli/src/run.ts",
+    "serve": "tsx packages/server/src/server.ts",
+    "narrative:smoke": "tsx packages/narrative/src/smoke.ts",
+    "dev:web": "vite --config packages/web/vite.config.ts",
+    "build:web": "vite build --config packages/web/vite.config.ts",
+    "typecheck:web": "tsc --noEmit -p packages/web/tsconfig.json",
+    "db:generate": "drizzle-kit generate --config packages/server/drizzle.config.ts",
+    "db:migrate": "tsx packages/server/src/persistence/migrate.ts",
+    "db:check": "tsx packages/server/src/persistence/verify.ts",
+    "db:goldenmaster": "tsx packages/server/src/persistence/goldenmaster.ts",
+    "db:projectcheck": "tsx packages/server/src/persistence/projectcheck.ts",
+    "db:apicheck": "tsx packages/server/src/persistence/apicheck.ts",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "drizzle-kit": "^0.30.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

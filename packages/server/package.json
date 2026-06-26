@@ -1,0 +1,19 @@
+{
+  "name": "@island/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@island/engine": "*",
+    "@island/narrative": "*",
+    "@island/shared": "*",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.38.3",
+    "fastify": "^5.8.5",
+    "postgres": "^3.4.5"
+  }
+}
