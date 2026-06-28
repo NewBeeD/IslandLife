@@ -274,6 +274,18 @@ button:disabled {
   font-weight: 600;
   margin-top: 0.3rem;
 }
+.money__asset {
+  padding: 0.2rem 0;
+}
+.money__sell {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.2rem 0 0.4rem;
+}
+.money__sell button {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.6rem;
+}
 .money__line--debt {
   flex-wrap: wrap;
 }

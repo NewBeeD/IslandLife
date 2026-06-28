@@ -9,3 +9,4 @@ export { toFeedDTO } from './feed';
 export { toCommunityDTO } from './community';
 export { toOpportunitiesDTO } from './opportunities';
 export { toDecisionDTO, toFinancingQuoteDTO } from './decisions';
+export { toAssetSaleResultDTO, toCollateralQuoteDTO, toBorrowResultDTO } from './assets';

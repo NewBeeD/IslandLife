@@ -10,6 +10,7 @@ import { computeLegacyIncrement } from './legacy';
 import { updateMarketPrice } from './market';
 import { activeVentures, distributeVentureEquity, hasVentures, totalOperatingCosts } from './ventures';
 import { distributePartnershipProfit, strainFriendDefaults } from './funding';
+import { repossessCollateral, resolvePendingSales } from './assets';
 
 // Consecutive unmet-payment months before the player's loans fall into default
 // (Phase 7). NPCs default on the first month they cannot cover (unchanged).
@@ -56,6 +57,11 @@ export function simulateOneMonth(world: WorldState): WorldState {
     company.status = status;
     company.isSolvent = status !== 'CLOSED';
   }
+
+  // PHASE 4c (Phase 12, additive): settle any PATIENT asset sales that have come
+  // due, so the proceeds are in the player's cash before loans are serviced. A no-op
+  // without pending sales, so the digest holds.
+  resolvePendingSales(world);
 
   // PHASE 5: persons receive wages, pay personal loans
   for (const agent of world.agents) {
@@ -108,6 +114,10 @@ export function simulateOneMonth(world: WorldState): WorldState {
   // capital hit). Venture equity holders and shared-firm partners are paid their slice
   // of a good month. All no-ops without Phase-11 state, so the digest holds (S2).
   strainFriendDefaults(world);
+  // Phase 12: a defaulted secured loan is settled by seizing its collateral. Runs
+  // after defaults are marked (Phase 5) and before defaulted debt is written off
+  // (Phase 7). A no-op without secured loans in default, so the digest holds.
+  repossessCollateral(world);
   distributeVentureEquity(world);
   distributePartnershipProfit(world);
 

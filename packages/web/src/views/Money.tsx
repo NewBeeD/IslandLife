@@ -1,8 +1,14 @@
-import type { MoneyDTO } from '@island/shared';
+import { useCallback, useEffect, useState } from 'react';
+import type { AssetLine, CollateralQuoteDTO, MoneyDTO, SaleMode } from '@island/shared';
+import { api } from '../api/client';
+
+// Selectable repayment terms for a loan secured by an asset (1–5 years).
+const BORROW_TERM_OPTIONS = [12, 24, 36, 48, 60];
 
 // The Money view. Cash in hand, the month's income and expense lines, the delta,
 // and (Phase 7) the player's own books in full: asset values, each loan's interest
-// rate and interest/principal split, and net worth.
+// rate and interest/principal split, and net worth. Phase 12: each asset can be
+// sold — quick for cash now, or listed for a fuller price after a wait.
 function ec(amount: number): string {
   if (!Number.isFinite(amount)) amount = 0; // never render EC$NaN
   const sign = amount < 0 ? '-' : '';
@@ -13,8 +19,28 @@ function pct(rate: number): string {
   return `${(rate * 100).toFixed(2)}%`;
 }
 
-export function Money({ money }: { money: MoneyDTO }) {
+export function Money({
+  money,
+  saveId,
+  onChanged,
+}: {
+  money: MoneyDTO;
+  saveId: string;
+  onChanged: () => void;
+}) {
   const delta = money.thisMonthDelta;
+  const [selling, setSelling] = useState<string | null>(null);
+  const [borrowAgainst, setBorrowAgainst] = useState<string | null>(null);
+
+  const sell = async (assetId: string, mode: SaleMode) => {
+    setSelling(assetId);
+    try {
+      await api.sellAsset(saveId, assetId, mode);
+      onChanged();
+    } finally {
+      setSelling(null);
+    }
+  };
   return (
     <div className="money">
       <div className="money__cash">
@@ -61,11 +87,51 @@ export function Money({ money }: { money: MoneyDTO }) {
       {money.assets.length > 0 && (
         <section className="money__section">
           <h3>Assets</h3>
-          {money.assets.map((a, i) => (
-            <div className="money__line" key={i}>
-              <span>{a.label}</span>
-              <span>{ec(a.value)}</span>
-              <span className="muted">{a.ownership}</span>
+          {money.assets.map((a) => (
+            <div className="money__asset" key={a.id}>
+              <div className="money__line">
+                <span>{a.label}</span>
+                <span>{ec(a.value)}</span>
+                <span className="muted">
+                  {a.pledged ? 'pledged against a loan' : a.listedForSale ? 'listed for sale' : a.ownership}
+                </span>
+              </div>
+              {a.resale && (
+                <div className="money__sell">
+                  <button
+                    type="button"
+                    disabled={selling === a.id}
+                    onClick={() => sell(a.id, 'QUICK')}
+                  >
+                    Sell now · {ec(a.resale.quickPrice)}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={selling === a.id}
+                    onClick={() => sell(a.id, 'PATIENT')}
+                  >
+                    List for sale · {ec(a.resale.patientPrice)} in ~{a.resale.settlesInMonths} mo
+                  </button>
+                  <button
+                    type="button"
+                    disabled={selling === a.id}
+                    onClick={() => setBorrowAgainst(borrowAgainst === a.id ? null : a.id)}
+                  >
+                    {borrowAgainst === a.id ? 'Cancel' : 'Borrow against it'}
+                  </button>
+                </div>
+              )}
+              {borrowAgainst === a.id && (
+                <BorrowPanel
+                  saveId={saveId}
+                  asset={a}
+                  onDone={() => {
+                    setBorrowAgainst(null);
+                    onChanged();
+                  }}
+                  onCancel={() => setBorrowAgainst(null)}
+                />
+              )}
             </div>
           ))}
         </section>
@@ -135,6 +201,156 @@ export function Money({ money }: { money: MoneyDTO }) {
           ⚠ {n}
         </p>
       ))}
+    </div>
+  );
+}
+
+// Borrow against an asset the player owns. They drag how much to raise; the panel
+// polls the bank for live terms (loan size, monthly payment, the approve/counter/
+// decline result). A COUNTER means the bank will lend less than asked — one click
+// takes the bank's smaller loan. Booking pledges the asset until the loan is cleared.
+function BorrowPanel({
+  saveId,
+  asset,
+  onDone,
+  onCancel,
+}: {
+  saveId: string;
+  asset: AssetLine;
+  onDone: () => void | Promise<void>;
+  onCancel: () => void;
+}) {
+  const maxPrincipal = Math.max(500, Math.floor(asset.value / 500) * 500);
+  const [principal, setPrincipal] = useState(
+    Math.min(maxPrincipal, Math.max(500, Math.round(asset.value * 0.3))),
+  );
+  const [term, setTerm] = useState(BORROW_TERM_OPTIONS[2] ?? 36);
+  const [quote, setQuote] = useState<CollateralQuoteDTO | null>(null);
+  const [quoting, setQuoting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Live-quote on every change to amount or term (debounced).
+  useEffect(() => {
+    let cancelled = false;
+    setQuoting(true);
+    const id = setTimeout(() => {
+      api
+        .quoteBorrow(saveId, asset.id, term, principal)
+        .then((q) => {
+          if (!cancelled) setQuote(q);
+        })
+        .catch((e) => {
+          if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        })
+        .finally(() => {
+          if (!cancelled) setQuoting(false);
+        });
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
+  }, [saveId, asset.id, principal, term]);
+
+  // Accepting a counter = ask for exactly what the bank will lend.
+  const takeCounter = useCallback(() => {
+    if (quote) setPrincipal(quote.maxPrincipal);
+  }, [quote]);
+
+  const borrow = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.borrowAgainstAsset(saveId, asset.id, principal, term);
+      await onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [saveId, asset.id, principal, term, onDone]);
+
+  const canBorrow = !!quote && quote.outcome !== 'DECLINED' && quote.maxPrincipal > 0;
+
+  return (
+    <div className="financing">
+      <div className="financing__head">
+        <span>Borrow against {asset.label.toLowerCase()}</span>
+        <strong>{ec(asset.value)}</strong>
+      </div>
+
+      <label className="financing__field">
+        <span>
+          Raise <strong>{ec(principal)}</strong>
+        </span>
+        <input
+          type="range"
+          min={500}
+          max={maxPrincipal}
+          step={500}
+          value={principal}
+          onChange={(e) => setPrincipal(Number(e.target.value))}
+          disabled={busy}
+        />
+      </label>
+
+      <label className="financing__field">
+        <span>Pay it back over</span>
+        <select value={term} onChange={(e) => setTerm(Number(e.target.value))} disabled={busy}>
+          {BORROW_TERM_OPTIONS.map((t) => (
+            <option key={t} value={t}>
+              {t} months ({Math.round(t / 12)} yr)
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div
+        className={`financing__quote financing__quote--${quote?.outcome.toLowerCase() ?? 'pending'}`}
+      >
+        {quoting && !quote && <p className="muted">Asking the bank…</p>}
+        {quote && (
+          <>
+            <div className="financing__line">
+              <span>Borrow</span>
+              <span>{ec(quote.maxPrincipal)}</span>
+            </div>
+            {quote.outcome !== 'DECLINED' && (
+              <>
+                <div className="financing__line">
+                  <span>Monthly payment</span>
+                  <span>{ec(quote.monthlyPayment)}</span>
+                </div>
+                <div className="financing__line muted">
+                  <span>
+                    {quote.bankLabel} · {pct(quote.interestRate)} · {quote.termMonths} months
+                  </span>
+                </div>
+              </>
+            )}
+            <p className={`financing__reason financing__reason--${quote.outcome.toLowerCase()}`}>
+              {quote.reason}
+            </p>
+            {quote.outcome === 'COUNTER' && quote.maxPrincipal < principal && (
+              <button className="financing__counter" onClick={takeCounter} disabled={busy}>
+                Take the bank's offer — borrow {ec(quote.maxPrincipal)}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="financing__actions">
+        <button className="primary" onClick={borrow} disabled={busy || !canBorrow}>
+          {busy ? 'Signing…' : 'Take the loan'}
+        </button>
+        <button className="decision__back" onClick={onCancel} disabled={busy}>
+          Not now
+        </button>
+      </div>
+
+      {error && <p className="error">{error}</p>}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import {
   isFriendLoanBank,
   netWorthOf,
   playerShareOf,
+  resaleQuote,
   ventureIncomeLines,
 } from '@island/engine';
 import type {
@@ -158,11 +159,32 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
   const ownedAssets = portfolio
     ? [...p.economicAssets, ...activeVentures(p).flatMap((v) => v.assets)]
     : p.economicAssets;
-  const assets: AssetLine[] = ownedAssets.map((a) => ({
-    label: assetLabel(a.type, a.size),
-    ownership: 'Yours',
-    value: Math.round(a.value),
-  }));
+  const assets: AssetLine[] = ownedAssets.map((a) => {
+    const line: AssetLine = {
+      id: a.id,
+      label: assetLabel(a.type, a.size),
+      ownership: 'Yours',
+      value: Math.round(a.value),
+    };
+    // Phase 12: a pledged or already-listed asset cannot be sold; otherwise show what
+    // a sale would fetch now (quick vs. patient), so the player can act from here.
+    if (a.pledgedToLoanId) {
+      line.pledged = true;
+    } else if (a.listedForSale) {
+      line.listedForSale = true;
+    } else {
+      const quick = resaleQuote(world, a.id, 'QUICK');
+      const patient = resaleQuote(world, a.id, 'PATIENT');
+      if (quick && patient) {
+        line.resale = {
+          quickPrice: quick.price,
+          patientPrice: patient.price,
+          settlesInMonths: patient.settlesInMonths,
+        };
+      }
+    }
+    return line;
+  });
 
   const debts: DebtLine[] = activeLoans.map((l) => {
     const interestPortion = (l.remainingPrincipal * l.interestRate) / 12;

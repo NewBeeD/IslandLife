@@ -41,6 +41,10 @@ export type CompanyStatus = 'HEALTHY' | 'DISTRESSED' | 'CLOSED';
 export type BankState = 'HEALTHY' | 'STRESSED' | 'DISTRESSED' | 'INSOLVENT';
 export type LoanStatus = 'ACTIVE' | 'PAID' | 'DEFAULT';
 
+// How an asset sale is timed (Phase 12). QUICK is a fire sale — cash now at a steep
+// haircut. PATIENT lists the asset and waits for a fuller price over a couple months.
+export type SaleMode = 'QUICK' | 'PATIENT';
+
 export type FamilyBackground =
   | 'FISHING_PORTSMOUTH'
   | 'FARMING_INTERIOR'

@@ -1,11 +1,17 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import {
   DecisionError,
+  SaleError,
   applyUpgradeFinancing,
+  borrowAgainstAsset,
   detectDueConsequences,
   detectEducationCompletions,
+  findBorrowerAsset,
+  listAssetForSale,
+  quoteCollateralLoan,
   quoteUpgradeFinancing,
   resolveDecision,
+  sellAssetNow,
   simulateOneMonth,
   surfaceOpportunities,
   updatePlayerIncome,
@@ -26,6 +32,7 @@ import type {
   CreateSaveResultDTO,
   DecisionResultDTO,
   NarrativeEntry,
+  SaleMode,
   WorldState,
 } from '@island/shared';
 import { createSave, loadSave, saveTick } from './persistence/saves';
@@ -36,6 +43,9 @@ import {
   type NarrativeWorker,
 } from './narrative/worker';
 import {
+  toAssetSaleResultDTO,
+  toBorrowResultDTO,
+  toCollateralQuoteDTO,
   toCommunityDTO,
   toDecisionDTO,
   toFeedDTO,
@@ -247,6 +257,100 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
     return result;
   });
 
+  // POST /saves/:id/assets/:assetId/sell — sell an owned asset for cash (Phase 12).
+  // Body { mode }: QUICK settles now at a fire-sale price; PATIENT lists it to settle
+  // in a couple of months at a fuller price. Re-quoted authoritatively, then persists.
+  app.post<{ Params: { id: string; assetId: string }; Body: { mode?: SaleMode } }>(
+    '/saves/:id/assets/:assetId/sell',
+    async (req, reply) => {
+      const loaded = await loadOr404(req.params.id, reply);
+      if (!loaded) return;
+      const { world } = loaded;
+      const mode: SaleMode = req.body?.mode === 'PATIENT' ? 'PATIENT' : 'QUICK';
+      const asset = findBorrowerAsset(world.player, req.params.assetId);
+      if (!asset) return reply.code(404).send({ error: `asset ${req.params.assetId} not found` });
+      // Capture the asset's shape now: a QUICK sale removes it before the DTO is built.
+      const captured = { ...asset };
+      try {
+        let dto;
+        if (mode === 'PATIENT') {
+          const sale = listAssetForSale(world, req.params.assetId);
+          dto = toAssetSaleResultDTO(world, captured, 'PATIENT', {
+            proceeds: sale.expectedPrice,
+            settlesInMonths: sale.resolveMonth - sale.listedMonth,
+            settled: false,
+            ventureClosed: false,
+          });
+        } else {
+          const result = sellAssetNow(world, req.params.assetId);
+          dto = toAssetSaleResultDTO(world, captured, 'QUICK', {
+            proceeds: result.price,
+            settlesInMonths: 0,
+            settled: true,
+            ventureClosed: result.ventureClosed,
+          });
+        }
+        await saveTick(req.params.id, world);
+        return dto;
+      } catch (err) {
+        if (err instanceof SaleError) return reply.code(409).send({ error: err.message });
+        throw err;
+      }
+    },
+  );
+
+  // POST /saves/:id/assets/:assetId/borrow/quote — live terms for a loan secured by an
+  // asset, read-only (the amount slider polls this). Body { termMonths, principal? }.
+  app.post<{
+    Params: { id: string; assetId: string };
+    Body: { termMonths?: number; principal?: number };
+  }>('/saves/:id/assets/:assetId/borrow/quote', async (req, reply) => {
+    const loaded = await loadOr404(req.params.id, reply);
+    if (!loaded) return;
+    const termMonths = Number(req.body?.termMonths ?? 0);
+    if (!Number.isFinite(termMonths) || termMonths <= 0) {
+      return reply.code(400).send({ error: 'a positive termMonths is required' });
+    }
+    const principal = req.body?.principal != null ? Number(req.body.principal) : undefined;
+    try {
+      const quote = quoteCollateralLoan(loaded.world, req.params.assetId, termMonths, principal);
+      return toCollateralQuoteDTO(quote);
+    } catch (err) {
+      return reply.code(404).send({ error: (err as Error).message });
+    }
+  });
+
+  // POST /saves/:id/assets/:assetId/borrow — book a loan secured by the asset. Body
+  // { termMonths, principal }. Pledges the asset, pays out the cash, persists.
+  app.post<{
+    Params: { id: string; assetId: string };
+    Body: { termMonths?: number; principal?: number };
+  }>('/saves/:id/assets/:assetId/borrow', async (req, reply) => {
+    const loaded = await loadOr404(req.params.id, reply);
+    if (!loaded) return;
+    const { world } = loaded;
+    const termMonths = Number(req.body?.termMonths ?? 0);
+    const principal = Number(req.body?.principal ?? 0);
+    if (
+      !Number.isFinite(termMonths) ||
+      termMonths <= 0 ||
+      !Number.isFinite(principal) ||
+      principal <= 0
+    ) {
+      return reply.code(400).send({ error: 'principal and a positive termMonths are required' });
+    }
+    if (!findBorrowerAsset(world.player, req.params.assetId)) {
+      return reply.code(404).send({ error: `asset ${req.params.assetId} not found` });
+    }
+    try {
+      const { loan } = borrowAgainstAsset(world, req.params.assetId, principal, termMonths);
+      await saveTick(req.params.id, world);
+      return toBorrowResultDTO(world, loan);
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
   // POST /saves/:id/advance — advance one month. Runs simulateOneMonth, fires the
   // Layer-1 template narrative synchronously, persists both, and returns the
   // transition blurb plus the immediately-available feed. The world never pauses
@@ -266,6 +370,14 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
 
     simulateOneMonth(world);
     const entries = generateMonthlyEntries(world);
+
+    // Phase 12: surface any in-month notices the engine queued this advance (a patient
+    // sale that settled, collateral seized after a default) as feed entries, then
+    // clear the queue so each notice is shown exactly once.
+    for (const note of world.playerNotifications) {
+      entries.push({ type: 'PERSONAL', text: note, month: world.month });
+    }
+    world.playerNotifications = [];
 
     // Surface any newly-available opportunity through the information channels
     // (P6.1), and render any delayed consequence that comes due this month as a

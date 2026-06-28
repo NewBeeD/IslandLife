@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   EUNICE_DECISION_ID,
   applyUpgradeFinancing,
+  borrowAgainstAsset,
   buildWorld,
+  findBorrowerAsset,
+  quoteCollateralLoan,
   quoteUpgradeFinancing,
+  sellAssetNow,
   simulateOneMonth,
   surfaceCrowdfund,
   surfacePartnership,
@@ -12,6 +16,9 @@ import {
 import { generateMonthlyEntries } from '@island/narrative';
 import type { CreationChoices } from '@island/engine';
 import {
+  toAssetSaleResultDTO,
+  toBorrowResultDTO,
+  toCollateralQuoteDTO,
   toCommunityDTO,
   toDecisionDTO,
   toFeedDTO,
@@ -260,5 +267,48 @@ describe('iceberg-leak contract (P-X1)', () => {
     expect(typeof money.netWorth).toBe('number');
     // The money DTO may carry these, but the global iceberg tokens still must not.
     assertNoLeak('money', money, { allowFinancial: true });
+  });
+
+  it('asset sale and collateral DTOs leak no hidden mechanics (Phase 12)', () => {
+    // A self-employed earner who owns sellable, pledgeable assets. The money view's
+    // resale quotes, the sale result, and the collateral quote/borrow result are the
+    // player's own books — financial tokens are permitted on the money/loan DTOs, but
+    // the global iceberg tokens never are.
+    const world = buildWorld(21, { population: 80 });
+    const p = world.player;
+    p.occupation = 'AGRICULTURE';
+    p.employmentStatus = 'SELF_EMPLOYED';
+    p.parish = 'SAINT_JOHN';
+    p.monthlyIncome = 2200;
+    p.cash = 3000;
+    p.economicAssets = [
+      { id: 'A_SELL', type: 'VEHICLE', size: 'MEDIUM', value: 28000 },
+      { id: 'A_PLEDGE', type: 'LAND', size: 'MEDIUM', value: 40000 },
+    ];
+
+    // The money view now carries resale quotes on each unpledged asset.
+    const money = toMoneyDTO(world);
+    const sellable = money.assets.find((a) => a.id === 'A_SELL');
+    expect(sellable?.resale?.quickPrice).toBeGreaterThan(0);
+    assertNoLeak('money', money, { allowFinancial: true });
+
+    // The collateral quote (the player's own prospective loan) — financial tokens OK.
+    const quote = quoteCollateralLoan(world, 'A_PLEDGE', 36);
+    assertNoLeak('collateral-quote', toCollateralQuoteDTO(quote), { allowFinancial: true });
+
+    // Borrowing books the loan; its result DTO is the player's own loan.
+    const { loan } = borrowAgainstAsset(world, 'A_PLEDGE', 8000, 36);
+    assertNoLeak('borrow-result', toBorrowResultDTO(world, loan), { allowFinancial: true });
+
+    // The sale result carries no financial tokens at all — clean under the strict set.
+    const captured = { ...findBorrowerAsset(p, 'A_SELL')! };
+    const result = sellAssetNow(world, 'A_SELL');
+    const saleDto = toAssetSaleResultDTO(world, captured, 'QUICK', {
+      proceeds: result.price,
+      settlesInMonths: 0,
+      settled: true,
+      ventureClosed: result.ventureClosed,
+    });
+    assertNoLeak('asset-sale', saleDto);
   });
 });

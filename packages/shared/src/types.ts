@@ -23,6 +23,13 @@ export interface Asset {
   type: 'LAND' | 'EQUIPMENT' | 'VEHICLE';
   size?: 'SMALL' | 'MEDIUM' | 'LARGE';
   value: number; // EC$
+  // Phase 12: set to a loan's id while this asset is pledged as that loan's
+  // collateral. A pledged asset cannot be sold and is seized if the loan defaults.
+  // Undefined on every ordinary asset (additive — the digest holds).
+  pledgedToLoanId?: string;
+  // Phase 12: set while the asset is listed for a PATIENT sale (a pending sale is
+  // recorded on the owner). Blocks a second listing/sale until it resolves.
+  listedForSale?: boolean;
 }
 
 export interface Loan {
@@ -41,6 +48,25 @@ export interface Loan {
   // Phase 11: set once when a friend-loan default has strained the friendship, so the
   // social-capital hit is applied exactly once. Undefined on every ordinary loan.
   friendStrainApplied?: boolean;
+  // Phase 12: secured lending. When set, this loan is backed by the borrower's asset
+  // of this id; the asset is pledged (cannot be sold) and is seized on default.
+  // Undefined on an unsecured loan (additive — the digest holds).
+  collateralAssetId?: string;
+  // Phase 12: set once the pledged collateral has been repossessed after a default,
+  // so the seizure happens exactly once.
+  collateralRepossessed?: boolean;
+}
+
+// Phase 12: a PATIENT asset sale in flight. The asset stays owned (and, for a
+// venture, still earning) until `resolveMonth`, when it is removed and the proceeds
+// are paid. The final price is recomputed at resolution, so a downturn during the
+// wait still bites. Only the player lists assets, so this is undefined for NPCs.
+export interface PendingSale {
+  assetId: string;
+  ventureId?: string; // the venture that owns the asset, if any (else economicAssets)
+  listedMonth: number;
+  resolveMonth: number;
+  expectedPrice: number; // the patient price quoted at listing (player-facing)
 }
 
 export interface Good {
@@ -294,6 +320,11 @@ export interface NPCAgent {
   // Optional. Undefined === { level: 'NONE', not enrolled }. Only the player enrols
   // in Phase 9, so NPCs and a pre-Phase-9 player stay byte-identical.
   education?: Education;
+
+  // ── Phase 12: asset sales in flight ─────────────────────────────────────────
+  // Optional. PATIENT sales the player has listed but not yet settled. Undefined for
+  // NPCs and whenever nothing is listed, so the determinism digest holds.
+  pendingSales?: PendingSale[];
 }
 
 export interface ActivePolicy {

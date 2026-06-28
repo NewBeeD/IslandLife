@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { NarrativeEntryType } from './narrative';
+import type { SaleMode } from './enums';
 
 // GET /saves/:id/state — the header bar. No scores.
 export interface StateDTO {
@@ -38,10 +39,26 @@ export interface MoneyLine {
   amount: number; // EC$, always positive; the section gives the sign
 }
 
+// What the player could get for an asset if they sold it (Phase 12). A QUICK fire
+// sale pays now at a haircut; a PATIENT listing waits for a fuller price. These are
+// the player's own books, so EC$ figures are shown.
+export interface AssetResaleDTO {
+  quickPrice: number; // EC$ paid today (fire sale)
+  patientPrice: number; // EC$ expected after a wait
+  settlesInMonths: number; // how long the patient sale takes to settle
+}
+
 export interface AssetLine {
+  id: string; // the asset's id, so the player can sell or pledge it (Phase 12)
   label: string;
   ownership: string; // "Yours"
   value: number; // EC$ — the asset's worth (Phase 7: shown to the player)
+  // Phase 12. `pledged` — backing a loan, so it cannot be sold. `listedForSale` — a
+  // patient sale is already in flight. `resale` — what a sale would fetch now;
+  // absent when the asset is pledged or already listed.
+  pledged?: boolean;
+  listedForSale?: boolean;
+  resale?: AssetResaleDTO;
 }
 
 export interface DebtLine {
@@ -216,4 +233,44 @@ export interface CreateSaveResultDTO {
   saveId: string;
   month: number;
   monthLabel: string;
+}
+
+// POST /saves/:id/assets/:assetId/sell — the outcome of selling an asset (Phase 12).
+// A QUICK sale settles immediately (cash now); a PATIENT sale is listed and settles
+// later, so `settled` is false and `proceeds` is the expected price.
+export interface AssetSaleResultDTO {
+  assetId: string;
+  mode: SaleMode;
+  settled: boolean; // true: paid now (QUICK). false: listed, settles later (PATIENT)
+  proceeds: number; // EC$ paid now (QUICK) or expected at settlement (PATIENT)
+  settlesInMonths: number; // 0 for QUICK
+  ventureClosed: boolean; // a venture lost its last asset and wound down
+  cashInHand: number; // EC$ after the sale
+  acknowledgement: string; // a short in-voice line
+}
+
+// POST /saves/:id/assets/:assetId/borrow/quote — a live quote for a loan secured by
+// an existing asset (Phase 12). Like the financing quote, this is the player's OWN
+// prospective loan, so `interestRate` is permitted; the bank's hidden score is not.
+export interface CollateralQuoteDTO {
+  assetId: string;
+  assetValue: number; // EC$ — the asset pledged as collateral
+  outcome: 'APPROVED' | 'COUNTER' | 'DECLINED';
+  maxPrincipal: number; // EC$ the bank will lend against it
+  interestRate: number; // annual, the player's own prospective loan
+  monthlyPayment: number; // EC$/month for maxPrincipal at this term
+  termMonths: number;
+  bankLabel: string;
+  reason: string; // plain language
+}
+
+// POST /saves/:id/assets/:assetId/borrow — the loan booked against the pledged asset.
+export interface BorrowResultDTO {
+  loanId: string;
+  principal: number; // EC$ borrowed
+  monthlyPayment: number; // EC$/month
+  interestRate: number; // annual (the player's own loan)
+  termMonths: number;
+  cashInHand: number; // EC$ after the loan is paid out
+  acknowledgement: string;
 }

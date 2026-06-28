@@ -1,5 +1,6 @@
 import type { Bank, BankState, Industry, Loan, NPCAgent, WorldState } from '@island/shared';
 import { clamp, clamp01 } from './rng';
+import { findBorrowerAsset } from './assets';
 
 // Recomputes a bank's non-performing-loan ratio from the live loan set and maps
 // it to a state. Guards divide-by-zero (no active loans -> ratio 0).
@@ -215,7 +216,9 @@ export function assessLoanApplication(
 }
 
 // Book an approved loan onto the borrower (the bank's exposure is recomputed in
-// the monthly solvency phase). Returns the created loan.
+// the monthly solvency phase). When `collateralAssetId` is given (Phase 12), the
+// loan is secured: the named asset is pledged (marked so it cannot be sold) and is
+// seized if the loan later defaults. Returns the created loan.
 export function originateLoan(
   world: WorldState,
   borrower: NPCAgent,
@@ -225,6 +228,7 @@ export function originateLoan(
   monthlyPayment: number,
   termMonths: number,
   purposeIndustry?: Industry,
+  collateralAssetId?: string,
 ): Loan {
   const loan: Loan = {
     id: `LOAN_${borrower.id}_${world.month}_${Math.round(principal)}`,
@@ -239,6 +243,75 @@ export function originateLoan(
     purposeIndustry,
     status: 'ACTIVE',
   };
+  if (collateralAssetId) {
+    const asset = findBorrowerAsset(borrower, collateralAssetId);
+    if (!asset) throw new Error(`originateLoan: collateral ${collateralAssetId} not found`);
+    loan.collateralAssetId = collateralAssetId;
+    asset.pledgedToLoanId = loan.id;
+  }
   borrower.loans.push(loan);
   return loan;
+}
+
+// ── Borrowing against an existing asset (Phase 12) ───────────────────────────
+// The player raises cash by pledging an asset they already own. The asset's value
+// is the collateral the bank prices against (the assessment already lowers the rate
+// and lifts the ceiling for secured lending); the asset is then pledged and seized
+// if the loan defaults. The player keeps using the asset while the loan runs.
+
+export interface CollateralQuote extends LoanAssessment {
+  assetId: string;
+  collateralValue: number; // EC$ — the pledged asset's worth
+}
+
+// Quote a loan secured by one of the player's assets. With no `requestedPrincipal`,
+// the ask defaults to the asset's value, so the returned (possibly COUNTER) amount
+// reveals the most the bank will lend against it. Pure — never mutates.
+export function quoteCollateralLoan(
+  world: WorldState,
+  assetId: string,
+  termMonths: number,
+  requestedPrincipal?: number,
+): CollateralQuote {
+  const asset = findBorrowerAsset(world.player, assetId);
+  if (!asset) throw new Error(`quoteCollateralLoan: asset ${assetId} not found`);
+  const ask = requestedPrincipal && requestedPrincipal > 0 ? requestedPrincipal : asset.value;
+  const assessment = assessLoanApplication(world, world.player, ask, termMonths, asset.value);
+  return { ...assessment, assetId, collateralValue: asset.value };
+}
+
+// Borrow against an asset: assess with the asset as collateral and, if the bank
+// lends, originate a secured loan for the approved amount (≤ requested) and pay the
+// player the cash. Throws if the asset is missing/pledged/listed or the bank declines.
+export function borrowAgainstAsset(
+  world: WorldState,
+  assetId: string,
+  requestedPrincipal: number,
+  termMonths: number,
+): { loan: Loan; assessment: LoanAssessment } {
+  const p = world.player;
+  const asset = findBorrowerAsset(p, assetId);
+  if (!asset) throw new Error(`borrowAgainstAsset: asset ${assetId} not found`);
+  if (asset.pledgedToLoanId) throw new Error('That asset is already pledged against a loan.');
+  if (asset.listedForSale) throw new Error('That asset is listed for sale.');
+
+  const assessment = assessLoanApplication(world, p, requestedPrincipal, termMonths, asset.value);
+  if (assessment.outcome === 'DECLINED' || assessment.approvedPrincipal <= 0) {
+    throw new Error(assessment.reason);
+  }
+  const principal = Math.min(requestedPrincipal, assessment.approvedPrincipal);
+  const monthlyPayment = Math.round(amortize(principal, assessment.interestRate, assessment.termMonths));
+  p.cash += principal;
+  const loan = originateLoan(
+    world,
+    p,
+    assessment.bankId,
+    principal,
+    assessment.interestRate,
+    monthlyPayment,
+    assessment.termMonths,
+    undefined,
+    assetId,
+  );
+  return { loan, assessment };
 }

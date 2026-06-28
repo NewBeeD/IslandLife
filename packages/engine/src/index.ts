@@ -8,8 +8,10 @@ export {
   amortize,
   assessLoanApplication,
   originateLoan,
+  quoteCollateralLoan,
+  borrowAgainstAsset,
 } from './banking';
-export type { LoanAssessment } from './banking';
+export type { LoanAssessment, CollateralQuote } from './banking';
 export {
   computeCompanyRevenue,
   checkCompanySolvency,
@@ -70,6 +72,16 @@ export {
   detectEducationCompletions,
   monthlyTuition,
 } from './education';
+export {
+  resaleQuote,
+  sellAssetNow,
+  listAssetForSale,
+  resolvePendingSales,
+  repossessCollateral,
+  findBorrowerAsset,
+  SaleError,
+} from './assets';
+export type { ResaleQuote } from './assets';
 export { worldDigest } from './digest';
 export { serializeWorld, deserializeWorld } from './serialize';
 export type { SerializedWorld, SerializedAgent, SerializedCompany } from './serialize';

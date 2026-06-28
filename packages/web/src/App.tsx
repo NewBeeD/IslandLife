@@ -123,7 +123,9 @@ export function App() {
       <section className="content">
         {view === 'daily' && <DailyLife entries={feed} />}
         {view === 'community' && community && <Community community={community} />}
-        {view === 'money' && money && <Money money={money} />}
+        {view === 'money' && money && (
+          <Money money={money} saveId={saveId} onChanged={() => refresh(saveId)} />
+        )}
         {view === 'opportunities' && opportunities && (
           <Opportunities
             saveId={saveId}

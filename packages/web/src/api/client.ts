@@ -1,5 +1,8 @@
 import type {
   AdvanceResultDTO,
+  AssetSaleResultDTO,
+  BorrowResultDTO,
+  CollateralQuoteDTO,
   CommunityDTO,
   CreateSaveResultDTO,
   DecisionDTO,
@@ -8,6 +11,7 @@ import type {
   FinancingQuoteDTO,
   MoneyDTO,
   OpportunitiesDTO,
+  SaleMode,
   StateDTO,
 } from '@island/shared';
 
@@ -80,6 +84,21 @@ export const api = {
   resolveFinancing(saveId: string, decisionId: string, downPayment: number, termMonths: number) {
     return post<DecisionResultDTO>(`/saves/${saveId}/decisions/${decisionId}`, {
       financing: { downPayment, termMonths },
+    });
+  },
+  sellAsset(saveId: string, assetId: string, mode: SaleMode) {
+    return post<AssetSaleResultDTO>(`/saves/${saveId}/assets/${assetId}/sell`, { mode });
+  },
+  quoteBorrow(saveId: string, assetId: string, termMonths: number, principal?: number) {
+    return post<CollateralQuoteDTO>(`/saves/${saveId}/assets/${assetId}/borrow/quote`, {
+      termMonths,
+      ...(principal != null ? { principal } : {}),
+    });
+  },
+  borrowAgainstAsset(saveId: string, assetId: string, principal: number, termMonths: number) {
+    return post<BorrowResultDTO>(`/saves/${saveId}/assets/${assetId}/borrow`, {
+      principal,
+      termMonths,
     });
   },
   advance(saveId: string) {
