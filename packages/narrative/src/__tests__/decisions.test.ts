@@ -6,9 +6,11 @@ import {
   applyUpgradeFinancing,
   buildWorld,
   resolveDecision,
+  surfaceCrowdfund,
+  surfacePartnership,
   surfaceOpportunities,
 } from '@island/engine';
-import type { PlayerDecision, WorldState } from '@island/shared';
+import type { NPCAgent, PlayerDecision, WorldState } from '@island/shared';
 import {
   buildDecisionSituation,
   buildDecisionAcknowledgement,
@@ -193,6 +195,107 @@ describe('Phase 10 — the new-venture decision reads in voice and leaks no mech
     expect(entry.text.toLowerCase()).not.toContain('decision');
     // The "everybody's selling juice now" beat — crowding in prose, never a stat.
     expect(entry.text.toLowerCase()).toMatch(/more|others|sellers/);
+  });
+});
+
+// A self-employed fisher with two well-off friends, so a crowdfunding slate surfaces.
+function fisherWithCrowdfundOffer(seed = 5): WorldState {
+  const world = buildWorld(seed, { population: 60 });
+  const p = world.player;
+  p.occupation = 'FISHING';
+  p.employmentStatus = 'SELF_EMPLOYED';
+  p.parish = 'SAINT_JOHN';
+  p.socialCapitalLocal = 0.1;
+  p.monthlyIncome = 1500;
+  world.month = 5;
+  const npcs = world.agents.filter((a) => !a.isPlayer).slice(0, 2);
+  npcs[0]!.cash = 10000;
+  npcs[0]!.riskTolerance = 0.85; // equity
+  npcs[1]!.cash = 8000;
+  npcs[1]!.riskTolerance = 0.1; // loan
+  p.socialNetwork = npcs.map((a: NPCAgent) => a.id);
+  surfaceCrowdfund(world);
+  return world;
+}
+
+function playerWithPartnershipOffer(seed = 9): WorldState {
+  const world = buildWorld(seed, { population: 60 });
+  const p = world.player;
+  p.occupation = 'FISHING';
+  p.employmentStatus = 'SELF_EMPLOYED';
+  p.parish = 'SAINT_JOHN';
+  p.socialCapitalLocal = 0.1;
+  p.cash = 25000;
+  world.month = 5;
+  const friend = world.agents.find((a) => !a.isPlayer)!;
+  friend.cash = 25000;
+  friend.parish = 'SAINT_JOHN';
+  p.socialNetwork = [friend.id];
+  surfacePartnership(world);
+  return world;
+}
+
+describe('Phase 11 — crowdfunding reads in voice and leaks no mechanics', () => {
+  it('frames raising money from friends and the trade-off without rates-as-labels', () => {
+    const world = fisherWithCrowdfundOffer();
+    const decision = world.decisions.find((d) => d.kind === 'CROWDFUND')!;
+    const situation = buildDecisionSituation(world, decision);
+    expect(situation.toLowerCase()).toContain('you');
+    expect(situation.toLowerCase()).toMatch(/loan|stake|friend/);
+    expect(situation).not.toMatch(/expected|probability|risk level|%/i);
+  });
+
+  it('acknowledges taking a friend’s money without judging it', () => {
+    const world = fisherWithCrowdfundOffer();
+    const decision = world.decisions.find((d) => d.kind === 'CROWDFUND')!;
+    const eqOpt = decision.options.find((o) => o.effect.funding?.fundingKind === 'EQUITY')!;
+    resolveDecision(world, decision.id, eqOpt.id);
+    const ack = buildDecisionAcknowledgement(world, decision);
+    expect(ack.toLowerCase()).toContain('you');
+    expect(ack).not.toMatch(/right|wrong|good choice|bad choice/i);
+  });
+
+  it('lands a valid MEMORY consequence that never names it a decision', () => {
+    const world = fisherWithCrowdfundOffer();
+    const decision = world.decisions.find((d) => d.kind === 'CROWDFUND')!;
+    const loanOpt = decision.options.find((o) => o.effect.funding?.fundingKind === 'LOAN')!;
+    resolveDecision(world, decision.id, loanOpt.id);
+    const entry = generateConsequenceEntry(world, decision);
+    expect(entry.type).toBe('MEMORY');
+    const result = validateNarrativeEntry(entry.text, 'ANNUAL_REFLECTION');
+    expect(result.valid, result.issues.join('; ')).toBe(true);
+    expect(entry.text.toLowerCase()).not.toContain('decision');
+  });
+});
+
+describe('Phase 11 — partnership reads in voice and leaks no mechanics', () => {
+  it('frames going in together and the trade-off without risk labels', () => {
+    const world = playerWithPartnershipOffer();
+    const decision = world.decisions.find((d) => d.kind === 'PARTNERSHIP')!;
+    const situation = buildDecisionSituation(world, decision);
+    expect(situation.toLowerCase()).toContain('you');
+    expect(situation.toLowerCase()).toMatch(/share|together|partner/);
+    expect(situation).not.toMatch(/expected|probability|risk level|%/i);
+  });
+
+  it('acknowledges forming the firm without judging it', () => {
+    const world = playerWithPartnershipOffer();
+    const decision = world.decisions.find((d) => d.kind === 'PARTNERSHIP')!;
+    resolveDecision(world, decision.id, 'GO_IN');
+    const ack = buildDecisionAcknowledgement(world, decision);
+    expect(ack.toLowerCase()).toContain('you');
+    expect(ack).not.toMatch(/right|wrong|good choice|bad choice/i);
+  });
+
+  it('lands a valid MEMORY consequence that never names it a decision', () => {
+    const world = playerWithPartnershipOffer();
+    const decision = world.decisions.find((d) => d.kind === 'PARTNERSHIP')!;
+    resolveDecision(world, decision.id, 'GO_IN');
+    const entry = generateConsequenceEntry(world, decision);
+    expect(entry.type).toBe('MEMORY');
+    const result = validateNarrativeEntry(entry.text, 'ANNUAL_REFLECTION');
+    expect(result.valid, result.issues.join('; ')).toBe(true);
+    expect(entry.text.toLowerCase()).not.toContain('decision');
   });
 });
 

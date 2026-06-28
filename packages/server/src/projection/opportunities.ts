@@ -13,6 +13,8 @@ function titleFor(opp: Opportunity): string {
   if (opp.kind === 'ASSET_UPGRADE' && opp.upgrade) return `A bigger step — ${opp.upgrade.assetLabel}`;
   if (opp.kind === 'EDUCATION_ENROLMENT' && opp.enrolment) return `Go back to study — ${opp.enrolment.name}`;
   if (opp.kind === 'NEW_VENTURE' && opp.newVenture) return `Something new — ${opp.newVenture.label}`;
+  if (opp.kind === 'CROWDFUND') return 'Raising money among friends';
+  if (opp.kind === 'PARTNERSHIP' && opp.partnership) return `Going in together — ${opp.partnership.companyName}`;
   return opp.npcName;
 }
 
@@ -59,6 +61,25 @@ function descriptionFor(opp: Opportunity): string {
       `alongside what you already do. ${crowd} You would put down what you can and borrow the rest.`
     );
   }
+  if (opp.kind === 'CROWDFUND' && opp.crowdfund) {
+    // The slate of offers is public to the player (they hear who is offering what);
+    // the backers' hidden psychology is not. Counts, not rates-as-fields, in prose.
+    const n = opp.crowdfund.offers.length;
+    return (
+      `A few people who know you would help fund ${opp.crowdfund.ventureLabel} — ${n} ` +
+      `${n === 1 ? 'offer' : 'offers'} on the table, some as a loan to repay, some for a share of ` +
+      `what the work makes. A debt between friends, or a hand in your business for years. You weigh ` +
+      `whose help to take, if any.`
+    );
+  }
+  if (opp.kind === 'PARTNERSHIP' && opp.partnership) {
+    const ps = opp.partnership;
+    return (
+      `${ps.partnerName} wants to go in with you on ${ps.companyName} — you each put up your share ` +
+      `and the bank carries the rest. More reach than you have alone, and a say you would no longer ` +
+      `hold by yourself. The takings and the troubles both get shared.`
+    );
+  }
   return 'An arrangement put to you.';
 }
 
@@ -66,6 +87,8 @@ function sourceFor(opp: Opportunity): string {
   if (opp.kind === 'ASSET_UPGRADE') return `Word: through ${opp.npcName}.`;
   if (opp.kind === 'EDUCATION_ENROLMENT') return 'Notice: the community college intake.';
   if (opp.kind === 'NEW_VENTURE') return 'Word: going round the place.';
+  if (opp.kind === 'CROWDFUND') return 'Word: among people who know you.';
+  if (opp.kind === 'PARTNERSHIP') return `Heard: directly from ${opp.npcName}.`;
   return `Heard: directly from ${opp.npcName}.`;
 }
 
@@ -79,6 +102,12 @@ function windowFor(opp: Opportunity, world: WorldState): string {
   }
   if (opp.kind === 'NEW_VENTURE') {
     return monthsLeft <= 1 ? 'It will be gone by next month.' : 'It is there for now, but not forever.';
+  }
+  if (opp.kind === 'CROWDFUND') {
+    return monthsLeft <= 1 ? 'The offers will not stand past this month.' : 'The offers stand for now.';
+  }
+  if (opp.kind === 'PARTNERSHIP') {
+    return monthsLeft <= 1 ? 'They want an answer this month.' : 'They are waiting on your word, but not forever.';
   }
   if (monthsLeft <= 1) return 'She needs an answer this month.';
   return 'She is waiting on your word, but not forever.';

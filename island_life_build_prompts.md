@@ -6,19 +6,20 @@ of work with an acceptance test, the files it touches, and its dependencies.
 
 - **Design source of truth:** the five `island_life_*.md` docs.
 - **Build sequence:** `island_life_technical_architecture.md` → "Build Sequence".
-- **Current state:** Phases 0–10 complete (scaffold, headless engine, persistence,
+- **Current state:** Phases 0–11 complete (scaffold, headless engine, persistence,
   character creation, the Fastify API + iceberg projection + template narrative
   + React/Vite client, the Layer-2 Claude Opus 4.8 narrative, the vertical
   slice — one unlabelled decision loop with a delayed consequence, the grounded
   livelihoods + generative opportunity + bank financing + real money view of
   Phase 7, the Phase 8 venture portfolio — concurrent income streams that sum each
   month, Phase 9 education & credentials — programs that drain tuition over
-  months, raise knowledge, and unlock credential-gated opportunities, and Phase 10
+  months, raise knowledge, and unlock credential-gated opportunities, Phase 10
   diversified opportunities — cross-domain new ventures financed through the same
   slider, low-barrier side hustles that saturate as a parish trade crowds, and a
-  market-watch line on the money view). **Next (Phase 11) — the diversified
-  economy continues:** equity/crowdfunding/NPC partnerships. Then the post-slice
-  backlog (P-B1 firm formation onward).
+  market-watch line on the money view, and Phase 11 equity, crowdfunding & NPC
+  partnerships — a cap table on ventures/firms, friend-funded loans and equity
+  stakes, and shared firms with an NPC partner that split profit by share). **Next:**
+  the post-slice backlog (P-B1 firm formation onward).
 
 ## How to read this
 
@@ -602,7 +603,7 @@ These are the guardrails I follow on every change; they're not steps, they're co
 
 ---
 
-## Phase 11 — Equity, crowdfunding & NPC partnerships 🔜 PLANNED
+## Phase 11 — Equity, crowdfunding & NPC partnerships ✅ DONE
 
 > Goal: raise money from **friends** (NPCs in the social network) as **debt or
 > equity**, and **partner with NPCs** in a shared company that splits debt and
@@ -662,10 +663,33 @@ These are the guardrails I follow on every change; they're not steps, they're co
   player sees their ownership %, friend-loan rates, and partner; NPC internals never
   leak.
 
-- *Phase acceptance:* a player funds a bigger boat by raising EC$ from three
-  friends (two for interest, one for a profit share), **or** partners with an NPC in
-  a shared fishing co-op; income splits accordingly; a later default strains the
-  friendship and surfaces as a memory; iceberg clean; digest updated with a note.
+- *Phase acceptance:* ✅ `npm run typecheck && npm run typecheck:web && npm test`
+  green (136 tests; +16 for Phase 11). Equity is additive — a venture/firm with no
+  `equityHolders` is byte-identical, so the no-Phase-11 determinism digest is
+  **unchanged** (the new monthly distributions and friend-default strain are all
+  no-ops without Phase-11 state; surfacing draws `world.rng` only in
+  `surfaceOpportunities`, which neither `simulateOneMonth` nor the golden master
+  calls). A self-employed player with well-off friends gets a mixed crowdfunding
+  slate — some backers lend (a friend-loan booked at a gentler-than-bank rate), some
+  take an equity stake (a profit share that dilutes the player's take); accepting
+  moves the backer's cash to the player and either books the loan or records the
+  holder. A partnership forms a player-owned `COOPERATIVE` with the NPC partner as an
+  equity holder, pools both contributions, books the firm's loan against the company
+  (`borrowerCompanyId`), and splits monthly profit by share. A good run pays
+  backers/partners and lifts `socialCapitalLocal`; a friend-loan default strains the
+  tie (`brokenContracts++`, a social-capital hit) exactly once and surfaces a delayed
+  `MEMORY` in voice. New `EquityHolder` + optional `equityHolders?` on `Venture`/
+  `Company`; `CROWDFUND` + `PARTNERSHIP` opportunity kinds with `BackerOffer`/
+  `CrowdfundSpec`/`PartnershipSpec`; `engine/funding.ts` (`surfaceCrowdfund`,
+  `surfacePartnership`, `applyBackerFunding`, `applyPartnership`,
+  `distributePartnershipProfit`, `strainFriendDefaults`, friend-loan id helpers) and
+  `engine/ventures.ts` equity split (`ventureGrossIncome`, `playerShareOf`,
+  `distributeVentureEquity`); a money-view ownership section + friend-loan source
+  labels (`OwnershipLine`); narrative framing + acknowledgements + delayed `MEMORY`
+  for both kinds; 9 tests in `funding.test.ts`, 6 in `decisions.test.ts`, and a
+  Phase-11 case in the iceberg contract (backer psychology, equity shares, and
+  friend-loan rates never cross the wire). Partnering with **other human players**
+  remains deferred to P-B10.
 
 ---
 

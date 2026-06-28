@@ -8,7 +8,8 @@ import { governmentAct } from './government';
 import { chargeTuition } from './education';
 import { computeLegacyIncrement } from './legacy';
 import { updateMarketPrice } from './market';
-import { activeVentures, hasVentures, totalOperatingCosts } from './ventures';
+import { activeVentures, distributeVentureEquity, hasVentures, totalOperatingCosts } from './ventures';
+import { distributePartnershipProfit, strainFriendDefaults } from './funding';
 
 // Consecutive unmet-payment months before the player's loans fall into default
 // (Phase 7). NPCs default on the first month they cannot cover (unchanged).
@@ -99,6 +100,14 @@ export function simulateOneMonth(world: WorldState): WorldState {
 
     agent.cash = Math.max(newCash, 0);
   }
+
+  // PHASE 5b (Phase 11, additive): friend-funded money flows. A friend-loan that
+  // fell into default this month strains the friendship (brokenContracts + a social-
+  // capital hit). Venture equity holders and shared-firm partners are paid their slice
+  // of a good month. All no-ops without Phase-11 state, so the digest holds (S2).
+  strainFriendDefaults(world);
+  distributeVentureEquity(world);
+  distributePartnershipProfit(world);
 
   // PHASE 6: NPC decisions
   for (const agent of world.agents) {

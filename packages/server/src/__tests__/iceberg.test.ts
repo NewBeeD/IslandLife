@@ -5,6 +5,8 @@ import {
   buildWorld,
   quoteUpgradeFinancing,
   simulateOneMonth,
+  surfaceCrowdfund,
+  surfacePartnership,
   surfaceOpportunities,
 } from '@island/engine';
 import { generateMonthlyEntries } from '@island/narrative';
@@ -186,6 +188,47 @@ describe('iceberg-leak contract (P-X1)', () => {
     const money = toMoneyDTO(world);
     expect(money.assets.some((a) => a.value > 0)).toBe(true);
     assertNoLeak('money', money, { allowFinancial: true });
+  });
+
+  it('a crowdfunding slate and a partnership leak no backer/partner internals (Phase 11)', () => {
+    // A self-employed fisher with well-off friends: a crowdfunding slate and a
+    // partnership both surface. Their DTOs must carry no hidden mechanics — backer
+    // psychology, equity shares-as-fields, or friend-loan rates as keys.
+    const world = buildWorld(5, { population: 80 });
+    const p = world.player;
+    p.occupation = 'FISHING';
+    p.employmentStatus = 'SELF_EMPLOYED';
+    p.parish = 'SAINT_JOHN';
+    p.socialCapitalLocal = 0.1; // no Eunice
+    p.monthlyIncome = 1500;
+    p.cash = 25000;
+    world.month = 5;
+    const friends = world.agents.filter((a) => !a.isPlayer).slice(0, 3);
+    for (const f of friends) {
+      f.cash = 25000;
+      f.parish = 'SAINT_JOHN';
+    }
+    friends[0]!.riskTolerance = 0.85; // equity
+    friends[1]!.riskTolerance = 0.1; // loan
+    p.socialNetwork = friends.map((a) => a.id);
+
+    const crowdfund = surfaceCrowdfund(world);
+    const partnership = surfacePartnership(world);
+    expect(crowdfund).toBeDefined();
+    expect(partnership).toBeDefined();
+
+    // The opportunities view (both kinds) carries no hidden mechanics.
+    assertNoLeak('opportunities', toOpportunitiesDTO(world));
+
+    // The crowdfund decision: a list of unlabelled options, no funding internals.
+    const cfDecision = toDecisionDTO(world, crowdfund!.decisionId);
+    expect(cfDecision!.interaction).toBe('OPTIONS');
+    expect(cfDecision!.options.length).toBeGreaterThanOrEqual(2);
+    assertNoLeak('crowdfund-decision', cfDecision);
+
+    // The partnership decision likewise.
+    const ptDecision = toDecisionDTO(world, partnership!.decisionId);
+    assertNoLeak('partnership-decision', ptDecision);
   });
 
   it('money view shows the payment AND the player’s own loan interest rate (Phase 7)', () => {

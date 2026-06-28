@@ -1,5 +1,13 @@
 import { GOODS, REPRESENTATIVE_GOOD, gameDateLabel } from '@island/shared';
-import { activeVentures, hasVentures, netWorthOf, ventureIncomeLines } from '@island/engine';
+import {
+  activeVentures,
+  friendBackerId,
+  hasVentures,
+  isFriendLoanBank,
+  netWorthOf,
+  playerShareOf,
+  ventureIncomeLines,
+} from '@island/engine';
 import type {
   AssetLine,
   DebtLine,
@@ -7,9 +15,51 @@ import type {
   MarketWatchLine,
   MoneyDTO,
   MoneyLine,
+  OwnershipLine,
   WorldState,
 } from '@island/shared';
 import { INCOME_LINE_LABEL, assetLabel, bankLabel } from './labels';
+
+// A loan's source as the player would name it: a bank by its short label, or a
+// friend by name (Phase 11 friend-loans). Never exposes the synthetic bank id.
+function loanSourceLabel(world: WorldState, bankId: string): string {
+  if (isFriendLoanBank(bankId)) {
+    const backer = world.agents.find((a) => a.id === friendBackerId(bankId));
+    return backer ? backer.name : 'a friend';
+  }
+  return bankLabel(bankId);
+}
+
+// The player's ownership where outside backers/partners hold a share (Phase 11):
+// ventures with equity holders and player-owned shared firms. Empty when everything
+// is wholly the player's. The holders' hidden psychology never appears — only names
+// and shares, as plain percentages.
+function buildOwnership(world: WorldState): OwnershipLine[] {
+  const p = world.player;
+  const lines: OwnershipLine[] = [];
+  const toLine = (
+    label: string,
+    holders: { name: string; share: number }[],
+    yourShare: number,
+  ): void => {
+    lines.push({
+      label,
+      yourSharePct: Math.round(yourShare * 100),
+      holders: holders.map((h) => ({ name: h.name, sharePct: Math.round(h.share * 100) })),
+    });
+  };
+  for (const v of activeVentures(p)) {
+    if (v.equityHolders && v.equityHolders.length > 0) toLine(v.label, v.equityHolders, playerShareOf(v));
+  }
+  for (const c of world.companies) {
+    if (c.ownerId !== p.id || c.status === 'CLOSED') continue;
+    const holders = c.equityHolders ?? [];
+    if (holders.length === 0) continue;
+    const outside = holders.reduce((s, h) => s + h.share, 0);
+    toLine(c.name, holders, Math.max(0, 1 - outside));
+  }
+  return lines;
+}
 
 // The local market prices the player's SPOT income reads (P10.5). Market prices are
 // public (the NEWSPAPER channel) — surfacing them lets the player see why a venture's
@@ -96,7 +146,10 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
     expenseLines.push({ label: 'Tuition', amount: Math.round(enrolled.monthlyCost) });
   }
   for (const l of activeLoans) {
-    expenseLines.push({ label: `Loan repayment (${bankLabel(l.bankId)})`, amount: Math.round(l.monthlyPayment) });
+    expenseLines.push({
+      label: `Loan repayment (${loanSourceLabel(world, l.bankId)})`,
+      amount: Math.round(l.monthlyPayment),
+    });
   }
   const expenseTotal = expenseLines.reduce((s, l) => s + l.amount, 0);
 
@@ -114,7 +167,7 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
   const debts: DebtLine[] = activeLoans.map((l) => {
     const interestPortion = (l.remainingPrincipal * l.interestRate) / 12;
     return {
-      label: `${bankLabel(l.bankId)} loan`,
+      label: `${loanSourceLabel(world, l.bankId)} loan`,
       remaining: Math.round(l.remainingPrincipal),
       principal: Math.round(l.principal),
       monthlyPayment: Math.round(l.monthlyPayment),
@@ -145,5 +198,6 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
     netWorth: Math.round(netWorthOf(p)),
     notes,
     marketWatch: buildMarketWatch(world),
+    ownership: buildOwnership(world),
   };
 }

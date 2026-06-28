@@ -65,6 +65,20 @@ export interface MarketWatchLine {
   trend: 'STRONG' | 'TYPICAL' | 'WEAK'; // current price vs. the good's base
 }
 
+// The player's stake in a venture or shared firm with outside equity (Phase 11). The
+// player sees their own ownership % and who else holds a share — backers' hidden
+// psychology never crosses the wire, only their name and share. Shares are plain
+// percentages, not the hidden `share`/`equityHolders` engine fields.
+export interface OwnershipShareDTO {
+  name: string; // "Marcus Charles" / "you"
+  sharePct: number; // 0–100
+}
+export interface OwnershipLine {
+  label: string; // the venture/firm — "the boat", "a two-boat fishing co-op"
+  yourSharePct: number; // 0–100 — the player's own share
+  holders: OwnershipShareDTO[]; // the outside holders (name + %)
+}
+
 export interface MoneyDTO {
   monthLabel: string;
   cashInHand: number;
@@ -78,6 +92,9 @@ export interface MoneyDTO {
   // Local market prices the player's SPOT ventures read (P10.5). Empty when the
   // player has no market-driven income. Optional for back-compatibility.
   marketWatch?: MarketWatchLine[];
+  // The player's ownership where outside backers/partners hold a share (Phase 11).
+  // Empty/absent when everything the player runs is wholly their own.
+  ownership?: OwnershipLine[];
 }
 
 // GET /saves/:id/feed?month= — the Daily Life feed for a month.

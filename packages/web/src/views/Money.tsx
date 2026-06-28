@@ -110,6 +110,21 @@ export function Money({ money }: { money: MoneyDTO }) {
         </section>
       )}
 
+      {money.ownership && money.ownership.length > 0 && (
+        <section className="money__section">
+          <h3>Who owns what</h3>
+          {money.ownership.map((o, i) => (
+            <div className="money__line money__line--debt" key={i}>
+              <span>{o.label}</span>
+              <span>{o.yourSharePct}% yours</span>
+              <span className="muted">
+                {o.holders.map((h) => `${h.name} ${h.sharePct}%`).join(' · ')}
+              </span>
+            </div>
+          ))}
+        </section>
+      )}
+
       <div className="money__networth">
         <span>Net worth</span>
         <strong>{ec(money.netWorth)}</strong>

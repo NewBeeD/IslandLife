@@ -57,12 +57,12 @@ function lowBarrierSaturationFactor(world: WorldState, industry: Industry, paris
   return clamp(SATURATION_BASELINE / (SATURATION_BASELINE + crowd), SATURATION_FLOOR, 1);
 }
 
-// One venture's income this month. STANDING is the fixed contract; SPOT reads the
-// local market price for the venture's representative good (so seasonality bites,
-// scaled by the venture's own output) and, for a LOW-barrier hustle, the parish's
-// crowding (Phase 10). A venture in a trade with no representative good earns a flat
-// base (still saturation-scaled if low-barrier).
-function ventureIncome(world: WorldState, parish: ParishId, venture: Venture): number {
+// One venture's GROSS income this month, before any equity split. STANDING is the
+// fixed contract; SPOT reads the local market price for the venture's representative
+// good (so seasonality bites, scaled by the venture's own output) and, for a
+// LOW-barrier hustle, the parish's crowding (Phase 10). A venture in a trade with no
+// representative good earns a flat base (still saturation-scaled if low-barrier).
+export function ventureGrossIncome(world: WorldState, parish: ParishId, venture: Venture): number {
   if (venture.incomeMode === 'STANDING' && venture.standingContract) {
     return venture.standingContract.monthlyAmount;
   }
@@ -80,11 +80,47 @@ function ventureIncome(world: WorldState, parish: ParishId, venture: Venture): n
   return Math.round(venture.spotBaseIncome * venture.outputScale * factor * saturation);
 }
 
+// The player's own share of a venture (Phase 11): 1 minus the outside equity. A
+// venture with no `equityHolders` is wholly the player's (share 1, byte-identical).
+export function playerShareOf(venture: Venture): number {
+  const outside = (venture.equityHolders ?? []).reduce((s, h) => s + h.share, 0);
+  return clamp(1 - outside, 0, 1);
+}
+
 // The active ventures' income as labelled lines (for the Money view) and as a sum
-// (for `monthlyIncome`). Pure and deterministic; never mutates.
+// (for `monthlyIncome`) — net of any outside equity, so the player sees and banks
+// only their own slice (Phase 11). Pure and deterministic; never mutates.
 export function ventureIncomeLines(world: WorldState): { label: string; amount: number }[] {
   const p = world.player;
-  return activeVentures(p).map((v) => ({ label: v.label, amount: ventureIncome(world, p.parish, v) }));
+  return activeVentures(p).map((v) => ({
+    label: v.label,
+    amount: Math.round(ventureGrossIncome(world, p.parish, v) * playerShareOf(v)),
+  }));
+}
+
+// Pay each venture's outside equity holders their slice of this month's gross income
+// (Phase 11, P11.5). A good run pays the backers and lifts the player's local social
+// capital a touch; the player keeps only their own share (already netted in
+// `ventureIncomeLines`). Additive — a venture with no holders does nothing, so the
+// no-Phase-11 path is byte-identical and the digest holds. Mutates backer cash.
+export function distributeVentureEquity(world: WorldState): void {
+  const p = world.player;
+  const byId = new Map(world.agents.map((a) => [a.id, a]));
+  for (const v of activeVentures(p)) {
+    const holders = v.equityHolders ?? [];
+    if (holders.length === 0) continue;
+    const gross = ventureGrossIncome(world, p.parish, v);
+    if (gross <= 0) continue;
+    let paidAny = false;
+    for (const h of holders) {
+      const backer = byId.get(h.personId);
+      if (!backer) continue;
+      backer.cash += Math.round(gross * h.share);
+      paidAny = true;
+    }
+    // A venture that paid its backers this month strengthens those ties.
+    if (paidAny) p.socialCapitalLocal = clamp(p.socialCapitalLocal + 0.002, 0, 1);
+  }
 }
 
 // Sum the player's active ventures into one figure for `monthlyIncome`.

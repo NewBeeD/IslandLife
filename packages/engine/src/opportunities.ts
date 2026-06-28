@@ -20,6 +20,12 @@ import {
   ventureAssetType,
 } from './ventures';
 import { credentialLevelOf, enrolPlayer, surfaceEducation } from './education';
+import {
+  applyBackerFunding,
+  applyPartnership,
+  surfaceCrowdfund,
+  surfacePartnership,
+} from './funding';
 import { clamp } from './rng';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -445,6 +451,12 @@ export function surfaceOpportunities(world: WorldState): Opportunity[] {
   const newVenture = surfaceNewVenture(world);
   if (newVenture) surfaced.push(newVenture);
 
+  // Raising money from friends, and forming a shared firm with a partner (Phase 11).
+  const crowdfund = surfaceCrowdfund(world);
+  if (crowdfund) surfaced.push(crowdfund);
+  const partnership = surfacePartnership(world);
+  if (partnership) surfaced.push(partnership);
+
   return surfaced;
 }
 
@@ -493,6 +505,32 @@ export function resolveDecision(
       if (opportunity) opportunity.status = 'ACCEPTED';
     } else if (opportunity) {
       opportunity.status = 'DECLINED';
+    }
+    return decision;
+  }
+
+  // Crowdfunding (Phase 11): a chosen backer's money comes in as a friend-loan or an
+  // equity stake; "raise nothing" is a no-op. The delayed MEMORY uses the consequence
+  // path scheduled above.
+  if (decision.kind === 'CROWDFUND') {
+    if (option.effect.funding) {
+      applyBackerFunding(world, option.effect.funding);
+      if (opportunity) opportunity.status = 'ACCEPTED';
+    } else {
+      decision.consequenceMonth = null;
+      if (opportunity) opportunity.status = 'DECLINED';
+    }
+    return decision;
+  }
+
+  // Partnership (Phase 11): going in forms the shared firm; staying out is a no-op.
+  if (decision.kind === 'PARTNERSHIP') {
+    if (option.effect.accept && opportunity?.partnership) {
+      applyPartnership(world, opportunity.partnership);
+      if (opportunity) opportunity.status = 'ACCEPTED';
+    } else {
+      decision.consequenceMonth = null;
+      if (opportunity) opportunity.status = 'DECLINED';
     }
     return decision;
   }

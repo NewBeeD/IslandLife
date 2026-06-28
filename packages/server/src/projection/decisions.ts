@@ -30,6 +30,8 @@ function titleFor(decision: PlayerDecision, opp: Opportunity | undefined): strin
   if (decision.kind === 'ASSET_UPGRADE') return 'A bigger step';
   if (decision.kind === 'EDUCATION_ENROLMENT') return opp?.enrolment ? `Study — ${opp.enrolment.name}` : 'Going back to study';
   if (decision.kind === 'NEW_VENTURE') return opp?.newVenture ? `Something new — ${opp.newVenture.label}` : 'Something new';
+  if (decision.kind === 'CROWDFUND') return 'Raising money among friends';
+  if (decision.kind === 'PARTNERSHIP') return opp?.partnership ? `Going in with ${opp.partnership.partnerName}` : 'A partnership';
   return 'A decision';
 }
 

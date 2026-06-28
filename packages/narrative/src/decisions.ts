@@ -43,6 +43,8 @@ export function buildDecisionSituation(world: WorldState, decision: PlayerDecisi
   if (decision.kind === 'ASSET_UPGRADE') return buildUpgradeSituation(world, decision);
   if (decision.kind === 'EDUCATION_ENROLMENT') return buildEducationSituation(world, decision);
   if (decision.kind === 'NEW_VENTURE') return buildNewVentureSituation(world, decision);
+  if (decision.kind === 'CROWDFUND') return buildCrowdfundSituation(world, decision);
+  if (decision.kind === 'PARTNERSHIP') return buildPartnershipSituation(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'the buyer';
   const amount = standingAmount(decision);
@@ -140,12 +142,58 @@ function buildNewVentureSituation(world: WorldState, decision: PlayerDecision): 
   );
 }
 
+// The framing of a crowdfunding round (Phase 11): raising what the work needs from
+// the people around you, as a loan or a stake. The genuine trade-off — a debt
+// between friends vs. a hand in your business for good — stated in prose, no rates.
+function buildCrowdfundSituation(world: WorldState, decision: PlayerDecision): string {
+  const opp = findOpportunity(world, decision);
+  const spec = opp?.crowdfund;
+  const place = parishName(world);
+  if (!spec) {
+    return `There is a way to raise what you need from people who know you, if you are willing to ask.`;
+  }
+  return (
+    `You have been turning over how to find the money for ${spec.ventureLabel}. The bank is one ` +
+    `road. The other runs through the people around you — a few have done well enough to put ` +
+    `something in, and word has reached them that you are looking.\n\n` +
+    `Some would lend it to you, to be paid back in time. Others would rather take a stake — money ` +
+    `in now for a cut of what the work makes later, and theirs to keep. Each carries its own ` +
+    `weight: a loan is a debt between friends; a stake is a hand in your business for years.\n\n` +
+    `Around ${place} money and friendship run close together, and people remember both how you ` +
+    `paid and how you treated them. Whose help do you take, if any?`
+  );
+}
+
+// The framing of a partnership (Phase 11): going in with someone on a shared firm —
+// more reach than either could stand up alone, against a say that is no longer yours
+// alone. Stated in prose; no shares-as-numbers, no risk labels.
+function buildPartnershipSituation(world: WorldState, decision: PlayerDecision): string {
+  const opp = findOpportunity(world, decision);
+  const spec = opp?.partnership;
+  const place = parishName(world);
+  if (!spec) {
+    return `There is a chance to go in with someone on a piece of work, if the two of you can agree.`;
+  }
+  return (
+    `${spec.partnerName} has put a proposition to you: the two of you go in together on ` +
+    `${spec.companyName}. You each put up your share, the bank carries the rest, and from there ` +
+    `it is a thing you own between you.\n\n` +
+    `It is more than either of you could stand up alone — more reach, more work, more coming in. ` +
+    `But it is shared, all of it: the takings, the costs, the say in how things are run. Two ` +
+    `people pulling the same way is a strong thing, right up until the day they pull apart.\n\n` +
+    `You have known ${spec.partnerName} around ${place} a long time. Do you throw in with them, ` +
+    `or keep to your own?`
+  );
+}
+
 // A short, in-voice acknowledgement of the choice just made — the line the
 // resolution returns. No outcome, no judgement; the consequence comes later.
 export function buildDecisionAcknowledgement(world: WorldState, decision: PlayerDecision): string {
   if (decision.kind === 'ASSET_UPGRADE') return buildUpgradeAcknowledgement(world, decision);
   if (decision.kind === 'EDUCATION_ENROLMENT') return buildEducationAcknowledgement(world, decision);
   if (decision.kind === 'NEW_VENTURE') return buildNewVentureAcknowledgement(world, decision);
+  if (decision.kind === 'CROWDFUND') return buildCrowdfundAcknowledgement(world, decision);
+  if (decision.kind === 'PARTNERSHIP') return buildPartnershipAcknowledgement(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'her';
   const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
@@ -176,6 +224,41 @@ function buildNewVentureAcknowledgement(world: WorldState, decision: PlayerDecis
     `pulling on your time and your money, and a second chance at a bit more coming in. ` +
     `What the work makes of it is for the months ahead to say.`
   );
+}
+
+// The acknowledgement after a crowdfunding round (Phase 11): a friend's money taken
+// in (as a loan or a stake), or the choice to carry it alone. No outcome yet.
+function buildCrowdfundAcknowledgement(world: WorldState, decision: PlayerDecision): string {
+  const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
+  const funding = chosen?.effect.funding;
+  if (!funding) {
+    return `You keep your own counsel and your own books. No one's money but yours rides on this, and no one's word to keep but your own.`;
+  }
+  if (funding.fundingKind === 'EQUITY') {
+    return (
+      `${funding.backerName} is in with you now — their money behind the work, a share of what it ` +
+      `makes theirs from here. You shake on it. A partner of a kind, whether you call it that or not.`
+    );
+  }
+  return (
+    `${funding.backerName} counts the money into your hand. A loan between friends, which is its own ` +
+    `kind of weight. You will pay it back the way you agreed, and you mean to.`
+  );
+}
+
+// The acknowledgement after a partnership choice (Phase 11): the firm formed and
+// shared, or the chance let pass. No outcome — the work will tell, in time.
+function buildPartnershipAcknowledgement(world: WorldState, decision: PlayerDecision): string {
+  const opp = findOpportunity(world, decision);
+  const name = opp?.partnership?.partnerName ?? 'your partner';
+  const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
+  if (chosen?.effect.accept) {
+    return (
+      `It is done — you and ${name} are partners now, the firm yours between you. The work is ` +
+      `bigger than either of you carried alone, and so is the trust it rests on.`
+    );
+  }
+  return `You let it go. You keep to your own work, your own books, your own say. ${name} takes it well enough.`;
 }
 
 // The acknowledgement after an enrolment choice (Phase 9): the forms signed and the
@@ -217,6 +300,8 @@ export function generateEducationCompletionEntry(world: WorldState, program: Enr
 export function generateConsequenceEntry(world: WorldState, decision: PlayerDecision): NarrativeEntry {
   if (decision.kind === 'ASSET_UPGRADE') return generateUpgradeConsequence(world, decision);
   if (decision.kind === 'NEW_VENTURE') return generateNewVentureConsequence(world, decision);
+  if (decision.kind === 'CROWDFUND') return generateCrowdfundConsequence(world, decision);
+  if (decision.kind === 'PARTNERSHIP') return generatePartnershipConsequence(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'Eunice';
   const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
@@ -287,6 +372,54 @@ function generateNewVentureConsequence(world: WorldState, decision: PlayerDecisi
         `costs land every month whether the money does or not, and there were mornings you did the ` +
         `sums twice. You knew you were reaching past what you knew when you took it on. Some days ` +
         `it sits easy, some days it does not. You carry it either way.`;
+  return {
+    type: 'MEMORY',
+    text,
+    month: world.month,
+    triggerId: `CONSEQUENCE:${decision.id}`,
+  };
+}
+
+// The delayed MEMORY after raising money from friends (Phase 11): how owing your own
+// people has settled — a stake repaid in faith, or a loan that sits heavier than its
+// sum. Connects back without naming the choice; carries the strain of a hard month.
+function generateCrowdfundConsequence(world: WorldState, decision: PlayerDecision): NarrativeEntry {
+  const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
+  const funding = chosen?.effect.funding;
+  const text =
+    funding?.fundingKind === 'EQUITY'
+      ? `The money your own people put in did its work — the venture stands where it would not have ` +
+        `stood on what you had alone. They carry a share of it now, and that changes the thing ` +
+        `between you. Some months you hand them their cut and it sits easy, faith repaid in coin. ` +
+        `Other months the takings are thin and you feel the weight of people who trusted you with ` +
+        `what little they could spare. You knew that when you took it. Help from your own is never ` +
+        `only help; it is a thread that ties you tighter, for the good and the bad of it.`
+      : `The loan from your friend carried you when the bank would not. The work got its start ` +
+        `because of it, and that you do not forget. Paying it back is its own quiet weight. Some ` +
+        `months the money goes out clean and nothing is said. Other months it is tight, and you ` +
+        `find yourself slow to cross paths with them, the sum not yet in your hand. They have not ` +
+        `pressed you. That somehow makes it sit the heavier. You learned that a friend's money is ` +
+        `never only money — it is the friendship, lent out alongside it.`;
+  return {
+    type: 'MEMORY',
+    text,
+    month: world.month,
+    triggerId: `CONSEQUENCE:${decision.id}`,
+  };
+}
+
+// The delayed MEMORY after forming a partnership (Phase 11): how a thing owned in
+// common has worn — halved worries some weeks, a quiet room of disagreement others.
+// Connects back without naming the choice; passes the voice validator.
+function generatePartnershipConsequence(world: WorldState, decision: PlayerDecision): NarrativeEntry {
+  const text =
+    `The partnership has its own weather now. There are weeks it is everything you hoped — two ` +
+    `sets of hands, the worries halved, the firm reaching further than you could have reached ` +
+    `alone. There are other weeks you and your partner see a thing differently and the room goes ` +
+    `quiet, and you remember that what you built, you built to share — the hard of it with the ` +
+    `good. The money comes and goes between you by what you agreed, and mostly it holds. You have ` +
+    `learned that a thing owned in common is owned by no one wholly, and that this is both its ` +
+    `strength and the cost of it.`;
   return {
     type: 'MEMORY',
     text,

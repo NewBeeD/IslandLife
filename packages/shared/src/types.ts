@@ -38,6 +38,9 @@ export interface Loan {
   originMonth: number;
   purposeIndustry?: Industry;
   status: LoanStatus;
+  // Phase 11: set once when a friend-loan default has strained the friendship, so the
+  // social-capital hit is applied exactly once. Undefined on every ordinary loan.
+  friendStrainApplied?: boolean;
 }
 
 export interface Good {
@@ -100,6 +103,20 @@ export interface Bank {
   state: BankState; // runtime
 }
 
+// ── Equity / cap table (Phase 11) ────────────────────────────────────────────
+// An outside stake in a venture or a shared company. `personId` is the NPC backer
+// (an equity crowdfunder) or the partner in a shared firm; `share` is their slice
+// of the income/profit (0–1). Outside shares sum to ≤ 1; the player holds the
+// remainder. `name` is carried for the player-facing money view (the backer's
+// hidden psychology never crosses the wire — only their name and share). Optional/
+// defaulted everywhere: an absent `equityHolders` is a sole stake and is
+// byte-identical to before (the digest holds).
+export interface EquityHolder {
+  personId: string;
+  name: string;
+  share: number; // 0–1 of the venture/company income
+}
+
 export interface Company {
   id: string;
   name: string;
@@ -119,6 +136,9 @@ export interface Company {
   status: CompanyStatus;
   isSolvent: boolean;
   estimatedAnnualTax: number;
+  // Phase 11: a shared firm formed with an NPC partner splits profit by share.
+  // Undefined for every seed company (the digest holds).
+  equityHolders?: EquityHolder[];
 }
 
 // ── Education & credentials (Phase 9) ────────────────────────────────────────
@@ -177,6 +197,10 @@ export interface Venture {
   // their SPOT income scales down as more people crowd the same trade in the parish.
   // Optional: undefined behaves as a non-saturating venture (the Phase 8 path).
   barrierTier?: BarrierTier;
+  // Phase 11: outside equity holders (friends who funded the venture for a profit
+  // share). The player banks income × their own share (1 − Σ outside shares);
+  // each holder is paid their slice. Undefined → a sole venture (byte-identical).
+  equityHolders?: EquityHolder[];
 }
 
 export interface NPCAgent {
@@ -321,7 +345,9 @@ export type OpportunityKind =
   | 'EUNICE_SUPPLY_CONTRACT'
   | 'ASSET_UPGRADE'
   | 'EDUCATION_ENROLMENT'
-  | 'NEW_VENTURE';
+  | 'NEW_VENTURE'
+  | 'CROWDFUND'
+  | 'PARTNERSHIP';
 export type OpportunityStatus = 'OPEN' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
 
 // The hidden spec of a new-venture opportunity (Phase 10). Cross-domain entry: a
@@ -363,6 +389,47 @@ export interface UpgradeSpec {
   maxTermMonths: number;
 }
 
+// ── Crowdfunding & partnerships (Phase 11) ───────────────────────────────────
+// A single backer's offer to fund the player — a friend putting money in either as
+// a loan (repaid with interest) or as equity (a profit share). Terms are derived
+// from the backer's hidden personality + cash; the player reads them as plain prose
+// on the option, never as raw fields. `kind` decides which branch resolution takes.
+export interface BackerOffer {
+  backerId: string; // the NPC backer's agent id
+  backerName: string;
+  amount: number; // EC$ the backer puts in (their cash → the player)
+  fundingKind: 'LOAN' | 'EQUITY';
+  // LOAN terms.
+  interestRate?: number; // annual; a friend's rate (often gentler than a bank's)
+  termMonths?: number;
+  // EQUITY terms.
+  share?: number; // 0–1 profit share the backer takes
+  ventureId?: string; // the venture the equity stake attaches to
+}
+
+// The hidden spec of a crowdfunding opportunity (the whole slate of backer offers).
+export interface CrowdfundSpec {
+  ventureId: string; // the venture the round funds (equity attaches here)
+  ventureLabel: string; // player-facing: "the boat"
+  offers: BackerOffer[];
+}
+
+// The hidden spec of a partnership opportunity (Phase 11). An NPC partner brings
+// cash for a share of a shared firm; the player matches with their own stake.
+export interface PartnershipSpec {
+  id: string;
+  partnerId: string;
+  partnerName: string;
+  industry: Industry;
+  companyName: string; // "the co-op" / a formed firm's name
+  partnerContribution: number; // EC$ the partner pools in
+  playerContribution: number; // EC$ the player must pool in
+  loanPrincipal: number; // EC$ borrowed against the firm (0 if none)
+  partnerShare: number; // 0–1 of the firm's profit the partner takes
+  monthlyOutputUnits: number; // the firm's output (priced by the market)
+  baseOperatingCosts: number; // EC$/month
+}
+
 export interface Opportunity {
   id: string;
   kind: OpportunityKind;
@@ -381,6 +448,8 @@ export interface Opportunity {
   ventureId?: string;
   enrolment?: EducationProgram; // present for EDUCATION_ENROLMENT opportunities
   newVenture?: NewVentureSpec; // present for NEW_VENTURE opportunities (Phase 10)
+  crowdfund?: CrowdfundSpec; // present for CROWDFUND opportunities (Phase 11)
+  partnership?: PartnershipSpec; // present for PARTNERSHIP opportunities (Phase 11)
 }
 
 // One unlabelled option. `label`/`description` are neutral player-facing prose (no
@@ -391,8 +460,16 @@ export interface DecisionOption {
   description: string;
   // The hidden mechanical resolution. `incomeMode`/`standingAmount` drive the income
   // decisions (Eunice); `enrol` marks the accept option of an education enrolment
-  // (Phase 9). Never projected — the player reads only label/description.
-  effect: { incomeMode?: 'SPOT' | 'STANDING'; standingAmount?: number; enrol?: boolean };
+  // (Phase 9); `funding` carries a chosen crowdfunding backer's terms and `accept`
+  // a partnership offer (Phase 11). Never projected — the player reads only
+  // label/description.
+  effect: {
+    incomeMode?: 'SPOT' | 'STANDING';
+    standingAmount?: number;
+    enrol?: boolean;
+    funding?: BackerOffer; // CROWDFUND — the backer offer this option takes
+    accept?: boolean; // PARTNERSHIP — true on the "go in" option
+  };
 }
 
 export interface PlayerDecision {

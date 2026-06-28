@@ -44,7 +44,22 @@ export {
   tradeOperatorCount,
   ensurePlayerVentures,
   ventureAssetType,
+  ventureGrossIncome,
+  playerShareOf,
+  distributeVentureEquity,
 } from './ventures';
+export {
+  surfaceCrowdfund,
+  surfacePartnership,
+  applyBackerFunding,
+  applyPartnership,
+  distributePartnershipProfit,
+  strainFriendDefaults,
+  isFriendLoanBank,
+  friendBankId,
+  friendBackerId,
+  FUNDING_CONSEQUENCE_LAG_MONTHS,
+} from './funding';
 export {
   credentialLevelOf,
   isEnrolled,
