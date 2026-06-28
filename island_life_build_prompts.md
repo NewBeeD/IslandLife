@@ -18,8 +18,15 @@ of work with an acceptance test, the files it touches, and its dependencies.
   slider, low-barrier side hustles that saturate as a parish trade crowds, and a
   market-watch line on the money view, and Phase 11 equity, crowdfunding & NPC
   partnerships — a cap table on ventures/firms, friend-funded loans and equity
-  stakes, and shared firms with an NPC partner that split profit by share). **Next:**
-  the post-slice backlog (P-B1 firm formation onward).
+  stakes, and shared firms with an NPC partner that split profit by share), and
+  Phase 12 asset collateral & secured borrowing (borrow against assets, sell assets,
+  collateral seizure on default), and Phase 13 opportunity lifecycle hygiene — lapsed
+  offers deduped by logical identity, surfacing suppressed within a re-offer cooldown,
+  a bounded prune of long-settled offers, and a deduped/capped "Passed" list with no
+  phantom expired enrolment. **Next:** the rest of the `ideas.md` playtest backlog —
+  **Phases 14–19** (loan lifecycle bugs first, then the wage model, a job market,
+  venture realism, and negotiable/always-on deals), then the original post-slice
+  backlog (P-B1 firm formation onward).
 
 ## How to read this
 
@@ -690,6 +697,362 @@ These are the guardrails I follow on every change; they're not steps, they're co
   Phase-11 case in the iceberg contract (backer psychology, equity shares, and
   friend-loan rates never cross the wire). Partnering with **other human players**
   remains deferred to P-B10.
+
+---
+
+## Phase 12 — Asset collateral & secured borrowing ✅ DONE
+
+> Goal: the player can borrow **against** their assets (secured loans), sell assets
+> (spot or patient), and a defaulted secured loan is settled by seizing its collateral.
+> *(Landed ahead of this playbook — see `engine/assets.ts`, `assetFlow.test.ts`; this
+> partially closes the collateral slice of P-B3.)*
+
+---
+
+# Backlog from `ideas.md` — playtest fixes & depth (Phases 13–19)
+
+> These phases turn the 19 playtest notes in `ideas.md` into sequenced, testable
+> work. **Bugs first** (Phases 13–14 are mostly correctness fixes the player can
+> already feel), then the realism + depth features (15–19). Every prompt still obeys
+> the Standing rules S1–S7 — engine stays pure, determinism via `world.rng`, the
+> iceberg holds for everyone but the player's own money, new behaviour ships with a
+> test, and the no-feature path stays byte-identical so the golden master holds.
+>
+> **Idea → phase map:** 6,19 → P13 · 4a/b/c,9,12 → P14 · 1,2,8,7 → P15 · 16,18 →
+> P16 · 3,10,15,17 → P17 · 5,11,13,14 → P18. (Idea numbers below refer to `ideas.md`.)
+
+## Phase 13 — Opportunity lifecycle hygiene (bug) ✅ DONE
+
+> Goal: lapsed opportunities stop **piling up and duplicating** in the "Passed" list,
+> and an enrolment the player already accepted stops showing "The moment has passed."
+> **Root cause (confirmed):** `world.opportunities` grows without bound; surfacing
+> pushes a *fresh* opportunity each cycle (a new juice-stand `NEW_VENTURE`, a new
+> `ASSET_UPGRADE`, a new `EDUCATION_ENROLMENT`) without checking for an equivalent
+> already on the world, and `toOpportunitiesDTO` re-emits **every** `EXPIRED` row — so
+> the same offer appears many times, and a stale expired education duplicate still
+> reads "The moment has passed" even after the player enrolled via another instance.
+>
+> **Covers ideas 19 (duplicate "Passed" entries) and 6 (education "moment has passed"
+> after enrolling).** Depends on nothing; pure projection + surfacing-guard work.
+
+- **P13.1 — One live offer per (kind, target).** In `surfaceOpportunities`
+  (`engine/opportunities.ts`), before surfacing each generative kind, suppress it when
+  an **equivalent** opportunity is already `OPEN` *or was recently `EXPIRED`* within a
+  cooldown — keyed by `(kind, ventureId/assetType/programId/partnerId)`, not by the
+  random `id`. The Eunice guard (`alreadyHasEunice`) is the existing pattern; generalize
+  it. *Files:* `engine/opportunities.ts` (+ `education.ts`/`funding.ts` surfacers).
+  *Acceptance:* advancing many months never produces two simultaneously-`OPEN` juice
+  stands, nor a fresh duplicate of an offer that just lapsed; deterministic per seed.
+
+- **P13.2 — Dedupe + cap the Passed projection.** In `toOpportunitiesDTO`
+  (`server/projection/opportunities.ts`) collapse `EXPIRED` rows to **one per logical
+  offer** (keep the most recent by `surfacedMonth`) and cap the list (e.g. last N). The
+  `active` list is unaffected. *Files:* `server/projection/opportunities.ts`.
+  *Acceptance:* the iceberg test still passes; a 36-month run shows each lapsed offer
+  **once** under Passed and the list length is bounded.
+
+- **P13.3 — Prune resolved/old opportunities from world state.** Add a bounded sweep in
+  `surfaceOpportunities` (or a small `pruneOpportunities`) that drops `ACCEPTED`/
+  `DECLINED` and long-expired entries (and their resolved `decisions`) so the snapshot
+  JSONB stops growing forever. Guard so a never-resolved player is byte-identical (S2).
+  *Files:* `engine/opportunities.ts`, `engine/serialize.ts` (if needed).
+  *Acceptance:* `world.opportunities` length stays bounded over a long run; the
+  no-opportunity golden master digest is unchanged.
+
+- **P13.4 — Enrolment status is unambiguous.** Confirm `resolveDecision` sets the
+  *accepted* education opportunity to `ACCEPTED` (it does, `opportunities.ts:505`) and
+  that no sibling duplicate remains `OPEN`/`EXPIRED` to show "moment has passed" — the
+  P13.1 guard plus a regression test. *Files:* `engine/__tests__/education.test.ts`.
+  *Acceptance:* after enrolling, neither the Opportunities `active` nor `expired` list
+  contains a "go back to study" entry for the program just started.
+
+- *Phase acceptance:* ✅ `npm run typecheck && npm run typecheck:web && npm test` green
+  (162 tests; +9 for Phase 13). Surfacing is now deduped by the *logical* offer, not
+  the random id: a new shared `opportunityLogicalKey(opp)` (a `(kind, target)` key —
+  Eunice / upgrade rung+venture / programId / new-venture spec / crowdfund venture /
+  partnership partner+firm) plus `hasRecentEquivalentOffer(...)` suppress re-surfacing
+  any offer that is still live or only just lapsed within
+  `OFFER_REOFFER_COOLDOWN_MONTHS` (9), wired into every generative surfacer
+  (`surfaceUpgrade`/`surfaceNewVenture` in `opportunities.ts`, `surfaceEducation` in
+  `education.ts`, `surfaceCrowdfund`/`surfacePartnership` in `funding.ts`) — so a
+  declined/expired juice stand, upgrade rung, or enrolment stops breeding duplicate
+  rows (P13.1). A bounded `pruneOpportunities` sweep in `surfaceOpportunities` drops
+  settled offers older than 18 months (and their fully-resolved decisions, keeping any
+  whose delayed MEMORY is still pending), so `world.opportunities` stays bounded over a
+  long life; a player who never sees an opportunity is byte-identical (the sweep early-
+  returns, golden master unchanged — S2) (P13.3). The Passed projection
+  (`toOpportunitiesDTO`) collapses `EXPIRED` rows to one per logical offer (the most
+  recent by `surfacedMonth`), caps the list at 8, and hides any lapsed row whose offer
+  is now OPEN/ACCEPTED/DECLINED — so an enrolment the player took up no longer reads
+  "the moment has passed" (P13.2 + P13.4, ideas 19 & 6). 6 tests in
+  `opportunityHygiene.test.ts` + 3 in `opportunityProjection.test.ts`; iceberg contract
+  still green; determinism digest unchanged.
+
+## Phase 14 — Loan lifecycle & financing controls (bug + feature) 🔴
+
+> Goal: loans actually **amortize and close**, the player can **see what they've paid
+> and what's left**, and can **pay off early / resize installments** — for bank loans
+> *and* friend/crowdfund loans. **Root cause (confirmed):** the phase-5 loop in
+> `simulateOneMonth.ts` subtracts `monthlyPayment` from cash but **never decrements
+> `loan.remainingPrincipal`** and never marks a fully-repaid loan `PAID` (only the
+> collateral-seizure path in `assets.ts:275` ever does), so balances never fall and a
+> paid-off loan lingers forever with live charges.
+>
+> **Covers ideas 4a (early payoff / adjust installment), 4b (paid-vs-remaining, balance
+> not reducing), 4c (paid loan still shows), 9 (crowdfund installment total), 12 (loan
+> option on every investment).** Depends on Phase 7 banking (`amortize`/`originateLoan`).
+
+- **P14.1 — Amortize in the monthly loop.** In `simulateOneMonth` phase 5, split each
+  `ACTIVE` loan's `monthlyPayment` into interest (`remainingPrincipal * monthlyRate`)
+  and principal, decrement `remainingPrincipal`, and when it reaches ≤ 0 set
+  `status = 'PAID'`, zero the payment, and stop charging it. Reuse the `amortize` math
+  from `banking.ts`. Applies to bank **and** friend loans (`funding.ts`). *Files:*
+  `engine/simulateOneMonth.ts`, `engine/banking.ts`. *Acceptance:* a loan's
+  `remainingPrincipal` falls each month and the loan flips to `PAID` on its final
+  payment; once `PAID` it no longer deducts cash. **This is a deliberate digest change
+  for any world with a loan — commit it with a note (S2/P-X2).**
+
+- **P14.2 — Pay off early & resize installments.** Add engine ops `repayLoan(world,
+  loanId, amount)` (lump-sum against `remainingPrincipal`, closes to `PAID` at 0) and
+  `setLoanInstallment(world, loanId, newMonthlyPayment)` (re-derives `termMonths`,
+  validated against a floor that at least covers interest). Surface as
+  `POST /saves/:id/loans/:loanId/repay` and `.../installment`. *Files:*
+  `engine/banking.ts`, `server/app.ts`, `web/views/Money.tsx`, `web/api/client.ts`.
+  *Acceptance:* paying excess cash against a loan reduces remaining/closes it and frees
+  the monthly charge; raising the installment shortens the term; rejected when cash is
+  insufficient or below the interest floor.
+
+- **P14.3 — Paid-to-date & remaining on the Money view.** Project per-loan `principal`,
+  `remainingPrincipal`, `paidToDate` (= `principal − remainingPrincipal`), and
+  `monthsLeft` (already on the loan DTO). The player's own debt is visible per the P7
+  S3 amendment; NPC loan internals still never leak. *Files:* `shared/dto.ts`,
+  `server/projection/money.ts`, `web/views/Money.tsx`. *Acceptance:* the Money view
+  shows paid vs remaining per loan and both reconcile to the engine; a `PAID` loan
+  drops off the debts list; iceberg test green.
+
+- **P14.4 — Crowdfund/friend-loan installment preview (idea 9).** When a `CROWDFUND`
+  loan offer is surfaced, include the projected `monthlyPayment` + total repayment in
+  the decision/quote projection so the player sees the installment **before** accepting.
+  *Files:* `engine/funding.ts`, `server/projection/decisions.ts`,
+  `web/views/Opportunities.tsx`. *Acceptance:* a friend-loan offer shows its monthly
+  installment and total before acceptance; figures match what gets booked.
+
+- **P14.5 — A financing option on every investment (idea 12).** Ensure **education
+  enrolment** and every `NEW_VENTURE`/`ASSET_UPGRADE` decision exposes the
+  `interaction: 'FINANCING'` slider (down-payment + loan) — not just asset upgrades.
+  Education tuition becomes financeable (a study loan amortized like any other).
+  *Files:* `engine/{opportunities,education}.ts`, `server/projection/decisions.ts`,
+  `web/views/Opportunities.tsx`. *Acceptance:* enrolling offers a put-down-some /
+  borrow-the-rest option; accepting books a study loan and the tuition drain is offset
+  by the loan proceeds.
+
+- *Phase acceptance:* `typecheck` ×2 + `npm test` green (digest change noted); a loan
+  pays down to zero and disappears, the player pays one off early and resizes another,
+  and an enrolment is taken on credit.
+
+## Phase 15 — The wage model & worker progression (bug + realism) 🟠
+
+> Goal: replace the opaque single `monthlyIncome` for **wage work** with a grounded
+> `dailyRate × workdays` model, so the per-day figure the player sees and the money
+> banked **agree**; start an unskilled worker at the Dominica base and let
+> **skill / experience / tools / credentials** raise the rate over time; and give the
+> player a screen to **see the skills they've earned**. **Confirmed gaps:** there is no
+> daily-rate or days-per-month concept anywhere; `CONSTRUCTION_LABOR` is priced at
+> $120/day in `shared/constants.ts:54` while the banked wage is an unrelated
+> `rng.range(800,1400)` roll (`worldBuild.ts:153`); a credential currently changes no
+> pay.
+>
+> **Covers ideas 1 (wage/month mismatch + base→skilled progression), 2 (ground in the
+> ~$7.50/hr basic rate), 8 (credentials raise pay), 7 (a skills view).** Depends on
+> Phase 8 ventures (the wage is "venture 0") and Phase 9 credentials.
+
+- **P15.1 — A grounded wage model.** Add a `WageProfile` to a wage venture/agent
+  (`{ dailyRate, workdaysPerMonth, hoursPerDay }`) and a shared `DOMINICA_BASE_DAY`
+  constant (basic ~$7.50/hr → a new unskilled worker starts a defined % above the
+  legal base, per idea 2). Derive `monthlyIncome = dailyRate × workdaysPerMonth`.
+  *Files:* `shared/{constants,types}.ts`, `engine/{ventures,worldBuild,
+  characterCreation/hydrate}.ts`. *Acceptance:* a construction worker's displayed
+  daily rate × workdays equals the banked monthly income (idea 1 resolved); seed a
+  new worker at the calibrated base.
+
+- **P15.2 — Rate rises with skill, experience, tools & credentials (ideas 2, 8).**
+  Make `dailyRate = base × f(experience, knowledge, credentialLevel, ownedTools)`,
+  recomputed monthly. An unskilled start earns the base; months of `experience.*`
+  growth, a tools upgrade (Phase 7 asset), and a completed credential each lift it,
+  within a realistic ceiling. *Files:* `engine/{ventures,simulateOneMonth}.ts`.
+  *Acceptance:* the same worker's daily rate climbs as experience/credential/tools
+  accrue; a fresh certificate produces a visible pay increase (idea 8 resolved);
+  deterministic per seed.
+
+- **P15.3 — Independent side jobs unlock with experience (idea 1 cont.).** After a
+  threshold of months/experience, surface paid-by-the-day or paid-on-completion side
+  jobs for an experienced worker (gated like other opportunities). *Files:*
+  `engine/opportunities.ts`. *Acceptance:* a green worker is not offered independent
+  side jobs; an experienced one is.
+
+- **P15.4 — A skills & credentials view (idea 7).** Add a `SkillsDTO` projecting the
+  player's acquired knowledge/experience domains and credential level **as qualitative
+  prose with descriptions** (no raw 0–1 scores — S3), exposed at
+  `GET /saves/:id/skills`, rendered as a new web view. *Files:* `shared/dto.ts`,
+  `server/projection/skills.ts` (new), `server/app.ts`, `web/views/Skills.tsx` (new),
+  `web/App.tsx`. *Acceptance:* the player can see the skills they've earned with
+  descriptions; iceberg test green (no numeric capitals leak).
+
+- *Phase acceptance:* `typecheck` ×2 + `npm test` green; a construction worker starts
+  at the Dominica base, the per-day and per-month figures reconcile, and the rate
+  visibly grows with experience, tools, and a credential — all on a new Skills view.
+  Deliberate, noted digest change where wage workers exist.
+
+## Phase 16 — Jobs & the job market (feature) 🟡
+
+> Goal: a real **job market** the player can browse and choose from — jobs with varying
+> pay, **attached expenses** (transport, food), **qualification + experience
+> requirements**, and **come-and-go availability**, just like opportunities — plus more
+> job variety. The player weighs each job's net pay against its costs and switches
+> trades by taking a new job. **Covers ideas 18 (job market) and 16 (more jobs).**
+> Depends on Phase 15 (the wage model) and Phase 9 (credential gates).
+
+- **P16.1 — Job posting model.** Add a `JobPosting` type (`{ id, title, industry,
+  dailyRate/monthlySalary, attachedCosts: { transport, food, … }, minCredential,
+  minExperience, stability, surfacedMonth, windowMonths }`) and a catalogue across the
+  eight industries. *Files:* `shared/types.ts`, `engine/jobs.ts` (new, pure).
+  *Acceptance:* postings round-trip through serialize; a default player with no job
+  market is byte-identical (S2).
+
+- **P16.2 — A market that opens and closes.** `surfaceJobs(world)` posts a rotating
+  slate gated by the player's credentials/experience, drawn from `world.rng`, with
+  windows that expire (reuse the Phase 13 hygiene so postings don't duplicate).
+  *Files:* `engine/jobs.ts`, `engine/opportunities.ts`. *Acceptance:* postings appear
+  and lapse over time; gated postings are hidden until the player qualifies;
+  deterministic per seed.
+
+- **P16.3 — Taking a job (net of expenses).** A `TAKE_JOB` decision replaces/var the
+  player's wage venture and books the posting's `attachedCosts` as a monthly operating
+  line, so the Money view shows **gross pay minus transport/food**. *Files:*
+  `engine/{jobs,ventures,opportunities}.ts`, `server/projection/{decisions,money}.ts`.
+  *Acceptance:* taking a higher-gross job with high transport cost can net **less**
+  than a closer lower-gross one — the trade-off is visible and the player chooses.
+
+- **P16.4 — Job market view + narrative.** A `GET /saves/:id/jobs` projection and a web
+  "Jobs" view listing postings with pay, net-of-cost, and requirements (prose for the
+  qualitative parts, S7). *Files:* `shared/dto.ts`, `server/projection/jobs.ts` (new),
+  `server/app.ts`, `web/views/Jobs.tsx` (new), `web/App.tsx`, `narrative/decisions.ts`.
+  *Acceptance:* the player browses available jobs, sees pay vs expenses vs
+  requirements, and picks one; voice validator passes.
+
+- *Phase acceptance:* `typecheck` ×2 + `npm test` green; a job market opens and closes,
+  the player compares net pay across postings and switches jobs; digest change noted.
+
+## Phase 17 — Venture realism: commitment, upgrades, shared assets, risk & exit 🟡
+
+> Goal: ventures stop being free-stacking and frictionless. A full-time job **costs
+> time**, so a side venture forces a real choice (stay / switch / hire an operator); a
+> shared vehicle is **one** fuel cost, not one per business; ventures can **fail,
+> fluctuate, and be exited** (discontinue / sell assets / shelve); the juice stand
+> uses a **concrete, randomized** economic model. **Covers ideas 3 (time commitment +
+> hire-an-operator + upgrade the business), 15 (shared-vehicle double-charge bug), 10
+> (juice-stand economics + randomized sales), 17 (investments fail/fluctuate + exit).**
+> Depends on Phase 8 ventures and Phase 12 assets/sales.
+
+- **P17.1 — Time budget & commitment (idea 3).** Give each venture a `timeLoad`
+  (a full-time job ≈ full); surfacing a hands-on venture that exceeds the player's free
+  time presents the three-way choice — **stay**, **switch** (close/scale the current
+  one), or **hire an operator** for a % of takings. A hired operator turns the venture
+  passive at a wage/share cost. *Files:* `shared/types.ts`,
+  `engine/{ventures,opportunities,simulateOneMonth}.ts`. *Acceptance:* a full-time
+  worker can't silently also run a hands-on stand; choosing "hire" yields reduced but
+  passive income net of the operator's cut.
+
+- **P17.2 — Shared-asset operating costs (idea 15 — bug).** Attribute fuel/upkeep to
+  the **physical asset**, not per-venture, so two ventures sharing one `VEHICLE` incur
+  **one** fuel charge. Fix `totalOperatingCosts`/upkeep summation
+  (`engine/ventures.ts`, `simulateOneMonth.ts:83`) to de-duplicate shared assets.
+  *Files:* `engine/{ventures,assets,simulateOneMonth}.ts`. *Acceptance:* a player whose
+  two ventures use one truck pays a single fuel/upkeep line; two trucks → two lines;
+  digest change noted.
+
+- **P17.3 — Juice-stand model (idea 10).** Model the side hustle concretely: a bag of
+  passion fruit (~$150) yields ~350–500 bottles at ~$5, expenses = fruit + sugar +
+  transport (+ operator share if hired), ~1 bag/month (up to 2+ in good months), **sales
+  randomized** via `world.rng` to reflect competition and poor months (compose with the
+  Phase 10 saturation factor). *Files:* `engine/ventures.ts`, `shared/constants.ts`.
+  *Acceptance:* juice-stand monthly profit varies month to month around a realistic
+  mean and reflects crowding; deterministic per seed.
+
+- **P17.4 — Ventures fail, fluctuate & can be exited (idea 17).** Not every venture
+  succeeds: on creation assign a hidden success/volatility profile so some underperform
+  or fail; add player exit ops — **discontinue**, **sell assets** (reuse Phase 12 spot/
+  patient sale), or **shelve** (pause, no income, reduced upkeep) when it can't be sold.
+  *Files:* `engine/{ventures,assets,opportunities}.ts`, `server/app.ts`,
+  `web/views/Money.tsx`. *Acceptance:* some ventures lose money/fluctuate; the player
+  can discontinue, liquidate, or shelve one and the Money view reflects it.
+
+- **P17.5 — Upgrade an existing business (idea 3 cont.).** Ensure the per-venture
+  upgrade ladder (P8.3) is reachable for **any** active venture, not only the starting
+  trade, so a business can grow past its initial stage. *Files:*
+  `engine/opportunities.ts`. *Acceptance:* an established juice stand is offered a
+  next-stage upgrade; accepting raises its output/cost.
+
+- **P17.6 — Narrative for commitment, failure & exit.** Frame the stay/switch/hire
+  choice, the bad-season fluctuation, and a wind-down in voice (S7). *Files:*
+  `narrative/decisions.ts`. *Acceptance:* the prose passes the voice validator and
+  leaks no raw success/volatility numbers (S3).
+
+- *Phase acceptance:* `typecheck` ×2 + `npm test` green; one truck → one fuel line, a
+  juice stand's takings swing realistically, a venture fails and is shelved, and a
+  hands-on side hustle forces a genuine time trade-off; digest changes noted.
+
+## Phase 18 — Deal-making: terms, returns & always-on funding 🟢
+
+> Goal: investment and partnership offers become **negotiable** and **wealth-scaled**,
+> crowdfunding is **always reachable** rather than a rare event, and schooling can be
+> **paused and resumed**. **Covers ideas 5 (choose how you receive returns; offers
+> scale with money + reputation), 14 (counter-propose partnership terms), 11
+> (crowdfunding always available), 13 (pause/resume school).** Depends on Phase 11
+> equity/crowdfunding/partnerships and Phase 9 education.
+
+- **P18.1 — Choose your return structure (idea 5).** When the player *invests in
+  someone else's* venture, offer a choice of how capital comes back —
+  interest + principal, a dividend, or a share of revenue — each a different
+  `BackerOffer`/claim shape on the funded party. *Files:* `shared/types.ts`,
+  `engine/funding.ts`, `server/projection/decisions.ts`, `web/views/Opportunities.tsx`.
+  *Acceptance:* the same opportunity can be taken as a loan, a dividend, or a revenue
+  share, and the monthly inflow differs accordingly.
+
+- **P18.2 — Offers scale with wealth & reputation (idea 5 cont.).** Make inbound
+  invest-in-a-friend solicitations **rare and small** when the player is poor/unknown
+  and **more frequent, larger, and riskier** as cash and `socialCapital*` rise.
+  *Files:* `engine/{opportunities,funding}.ts`. *Acceptance:* a broke newcomer rarely
+  gets solicited and only for small sums; a wealthy, well-known player gets bigger,
+  more frequent (riskier) propositions; deterministic per seed.
+
+- **P18.3 — Counter-propose partnership terms (idea 14).** Turn a `PARTNERSHIP`
+  decision into a negotiable one: instead of a fixed 50/50, the player proposes an
+  alternate split (e.g. 35% for a smaller contribution); the NPC accepts/counters/
+  declines based on their hidden utility (no score shown — apply-and-find-out). *Files:*
+  `shared/{types,dto.ts}`, `engine/{funding,company}.ts`, `server/app.ts`,
+  `web/views/Opportunities.tsx`. *Acceptance:* proposing 35%-for-less is accepted,
+  countered, or refused depending on the partner; the booked company reflects the
+  agreed split.
+
+- **P18.4 — Crowdfunding always available (idea 11).** Make raising money among friends
+  a **standing action** (like the always-on upgrade ladder) rather than a surfaced
+  one-off — the player can initiate it whenever they have a fundable venture, with the
+  backer slate generated on demand. *Files:* `engine/funding.ts`,
+  `engine/opportunities.ts`, `server/app.ts`, `web/views/Opportunities.tsx`.
+  *Acceptance:* a player with a venture and friends can start a crowdfund at will; the
+  slate still derives from backers' cash/personality.
+
+- **P18.5 — Pause & resume schooling (idea 13).** Add `pauseEducation` / `resumeEducation`
+  ops: pausing freezes `monthsRemaining` and stops the tuition drain; resuming
+  continues from where it left off. *Files:* `engine/education.ts`, `server/app.ts`,
+  `web/views/Opportunities.tsx`. *Acceptance:* a paused program stops charging tuition
+  and makes no progress; resuming finishes the remaining months and confers the
+  credential as normal.
+
+- *Phase acceptance:* `typecheck` ×2 + `npm test` green; the player picks a return
+  structure on an investment, counters a partnership to 35%, raises a crowdfund on
+  demand, and pauses then resumes a course; iceberg clean, digest changes noted.
 
 ---
 

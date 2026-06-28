@@ -1,4 +1,11 @@
-import { GOODS, REPRESENTATIVE_GOOD, credentialRank } from '@island/shared';
+import {
+  GOODS,
+  OFFER_REOFFER_COOLDOWN_MONTHS,
+  REPRESENTATIVE_GOOD,
+  credentialRank,
+  hasRecentEquivalentOffer,
+  opportunityLogicalKey,
+} from '@island/shared';
 import type {
   CredentialLevel,
   DecisionOption,
@@ -265,6 +272,11 @@ function surfaceUpgrade(world: WorldState): Opportunity | null {
     // byte-identical to Phase 7 (no `ventureId` key).
     ...(ventureId ? { ventureId } : {}),
   };
+  // P13.1 — don't re-surface the same rung while one is live or only just lapsed,
+  // so a declined/expired upgrade stops piling up duplicate "Passed" rows.
+  if (hasRecentEquivalentOffer(world.opportunities, opportunityLogicalKey(opportunity), world.month, OFFER_REOFFER_COOLDOWN_MONTHS)) {
+    return null;
+  }
   const decision: PlayerDecision = {
     id: decId,
     opportunityId: oppId,
@@ -358,7 +370,12 @@ function newVentureOnCooldown(world: WorldState): boolean {
 // financed interactively (the slider), like an asset upgrade.
 function surfaceNewVenture(world: WorldState): Opportunity | null {
   if (world.month < NEW_VENTURE_FROM_MONTH || newVentureOnCooldown(world)) return null;
-  const eligible = eligibleNewVentures(world);
+  // P13.1 — exclude any spec whose offer is still live or only just lapsed, so the
+  // random pick can never re-surface a juice stand that just expired (a duplicate
+  // "Passed" row). Filtering before the draw keeps the choice among fresh offers.
+  const eligible = eligibleNewVentures(world).filter(
+    (spec) => !hasRecentEquivalentOffer(world.opportunities, `NEW_VENTURE:${spec.id}`, world.month, OFFER_REOFFER_COOLDOWN_MONTHS),
+  );
   if (eligible.length === 0) return null;
   const spec = world.rng.pick(eligible);
 
@@ -394,6 +411,33 @@ function surfaceNewVenture(world: WorldState): Opportunity | null {
   return opportunity;
 }
 
+// How long a settled (EXPIRED/ACCEPTED/DECLINED) opportunity is kept on the world
+// before it is swept away (P13.3). Long enough to outlast the re-offer cooldown and
+// any delayed consequence, so pruning never races the lifecycle that still needs it.
+const PRUNE_AFTER_MONTHS = 18;
+
+// Sweep long-settled opportunities (and their fully-resolved decisions) off the
+// world so the snapshot JSONB stops growing without bound over a long life (P13.3).
+// A decision whose delayed consequence (the MEMORY) is still pending is kept until
+// it fires. A player who has never had an opportunity is byte-identical: the early
+// return means no mutation and the no-opportunity golden master holds (S2).
+function pruneOpportunities(world: WorldState): void {
+  if (world.opportunities.length === 0) return;
+  const dropped = new Set<string>();
+  world.opportunities = world.opportunities.filter((o) => {
+    if (o.status === 'OPEN') return true;
+    if (world.month - (o.surfacedMonth + o.windowMonths) < PRUNE_AFTER_MONTHS) return true;
+    dropped.add(o.id);
+    return false;
+  });
+  if (dropped.size === 0) return;
+  world.decisions = world.decisions.filter((d) => {
+    if (!dropped.has(d.opportunityId)) return true;
+    // Keep a resolved decision whose consequence MEMORY has not yet surfaced.
+    return d.resolvedMonth !== null && d.consequenceMonth !== null && !d.consequenceDelivered;
+  });
+}
+
 // The information-channel filter (P6.1). Expires stale offers and surfaces newly
 // available ones. Returns the opportunities that became visible this call (so the
 // server can note them). Deterministic in (world state, world.rng).
@@ -404,6 +448,8 @@ export function surfaceOpportunities(world: WorldState): Opportunity[] {
       opp.status = 'EXPIRED';
     }
   }
+  // Drop long-settled offers so world.opportunities stays bounded over a long life.
+  pruneOpportunities(world);
 
   const surfaced: Opportunity[] = [];
   const alreadyHasEunice = world.opportunities.some((o) => o.kind === 'EUNICE_SUPPLY_CONTRACT');

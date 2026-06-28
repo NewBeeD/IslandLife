@@ -1,4 +1,5 @@
 import { formatCurrency } from '@island/narrative';
+import { opportunityLogicalKey } from '@island/shared';
 import type { Opportunity, OpportunitiesDTO, OpportunityDTO, WorldState } from '@island/shared';
 
 // GET /saves/:id/opportunities — only what the player has heard of, through their
@@ -130,13 +131,39 @@ function toDTO(opp: Opportunity, world: WorldState): OpportunityDTO {
   };
 }
 
+// At most this many lapsed offers are shown under "Passed" — the most recent ones,
+// so the list stays readable instead of accumulating a wall of old offers (P13.2).
+const EXPIRED_CAP = 8;
+
 export function toOpportunitiesDTO(world: WorldState): OpportunitiesDTO {
   const active: OpportunityDTO[] = [];
-  const expired: OpportunityDTO[] = [];
+  // A logical offer that is currently live (OPEN) or already taken/turned down
+  // (ACCEPTED/DECLINED) must never also read as a lapsed "Passed" row — that is the
+  // phantom "the moment has passed" an enrolled player used to see (idea 6, P13.4).
+  const liveOrResolved = new Set<string>();
   for (const opp of world.opportunities) {
-    if (opp.status === 'OPEN') active.push(toDTO(opp, world));
-    else if (opp.status === 'EXPIRED') expired.push(toDTO(opp, world));
-    // ACCEPTED / DECLINED: resolved by the player — no longer a pending opportunity.
+    if (opp.status === 'OPEN' || opp.status === 'ACCEPTED' || opp.status === 'DECLINED') {
+      liveOrResolved.add(opportunityLogicalKey(opp));
+    }
   }
+  // P13.2 — collapse EXPIRED rows to one per logical offer (the most recent by
+  // surfacedMonth), so a juice stand that lapsed several times appears once, then
+  // cap the list. The `active` (OPEN) list is unaffected.
+  const latestExpired = new Map<string, Opportunity>();
+  for (const opp of world.opportunities) {
+    if (opp.status === 'OPEN') {
+      active.push(toDTO(opp, world));
+      continue;
+    }
+    if (opp.status !== 'EXPIRED') continue; // ACCEPTED/DECLINED: resolved, not pending
+    const key = opportunityLogicalKey(opp);
+    if (liveOrResolved.has(key)) continue; // superseded by a live/resolved instance
+    const seen = latestExpired.get(key);
+    if (!seen || opp.surfacedMonth > seen.surfacedMonth) latestExpired.set(key, opp);
+  }
+  const expired = [...latestExpired.values()]
+    .sort((a, b) => b.surfacedMonth - a.surfacedMonth)
+    .slice(0, EXPIRED_CAP)
+    .map((opp) => toDTO(opp, world));
   return { active, possible: [], expired };
 }

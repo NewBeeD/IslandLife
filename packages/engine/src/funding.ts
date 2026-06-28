@@ -1,4 +1,9 @@
-import { REPRESENTATIVE_GOOD, GOODS } from '@island/shared';
+import {
+  REPRESENTATIVE_GOOD,
+  GOODS,
+  OFFER_REOFFER_COOLDOWN_MONTHS,
+  hasRecentEquivalentOffer,
+} from '@island/shared';
 import type {
   BackerOffer,
   Company,
@@ -177,6 +182,18 @@ export function surfaceCrowdfund(world: WorldState): Opportunity | null {
   if (fundingOnCooldown(world, 'CROWDFUND', CROWDFUND_COOLDOWN)) return null;
 
   const target = equityTarget(world);
+  // P13.1 — don't re-open a round for the same venture while one is live or only
+  // just lapsed (keyed by the funded venture, before any backer draws).
+  if (
+    hasRecentEquivalentOffer(
+      world.opportunities,
+      `CROWDFUND:${target.id}`,
+      world.month,
+      OFFER_REOFFER_COOLDOWN_MONTHS,
+    )
+  ) {
+    return null;
+  }
   const candidates = acquaintances(world).filter((a) => a.cash >= 2000);
   if (candidates.length === 0) return null;
 
@@ -342,6 +359,19 @@ export function surfacePartnership(world: WorldState): Opportunity | null {
     monthlyOutputUnits: partnershipOutputUnits(template.industry, template.targetMonthlyRevenue),
     baseOperatingCosts: Math.round(template.targetMonthlyRevenue * 0.6),
   };
+
+  // P13.1 — don't re-offer the same partner/firm pairing while one is live or only
+  // just lapsed, so a declined partnership stops re-appearing as a duplicate.
+  if (
+    hasRecentEquivalentOffer(
+      world.opportunities,
+      `PARTNERSHIP:${spec.partnerId}:${spec.id}`,
+      world.month,
+      OFFER_REOFFER_COOLDOWN_MONTHS,
+    )
+  ) {
+    return null;
+  }
 
   const oppId = `OPP_${template.id}_${world.month}`;
   const decId = `DEC_${template.id}_${world.month}`;

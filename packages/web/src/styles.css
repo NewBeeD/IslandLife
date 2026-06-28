@@ -489,6 +489,21 @@ button:disabled {
   right: 0;
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: 1rem;
   padding: 1rem;
   background: linear-gradient(transparent, var(--paper) 30%);
+}
+.advance__newlife {
+  background: none;
+  border: none;
+  color: var(--ink-soft, #777);
+  font-size: 0.8rem;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0.3rem;
+}
+.app--loading {
+  align-items: center;
+  justify-content: center;
 }

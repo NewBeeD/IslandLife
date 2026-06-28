@@ -1,4 +1,9 @@
-import { INDUSTRY_DOMAIN, credentialRank } from '@island/shared';
+import {
+  INDUSTRY_DOMAIN,
+  OFFER_REOFFER_COOLDOWN_MONTHS,
+  credentialRank,
+  hasRecentEquivalentOffer,
+} from '@island/shared';
 import type {
   CredentialLevel,
   Education,
@@ -94,6 +99,19 @@ export function surfaceEducation(world: WorldState): Opportunity | null {
   const lowestRank = Math.min(...eligible.map((p) => credentialRank(p.targetLevel)));
   const atLowest = eligible.filter((p) => credentialRank(p.targetLevel) === lowestRank);
   const program = atLowest.find((p) => p.field === 'GENERAL') ?? atLowest[0]!;
+
+  // P13.1 — don't re-surface an enrolment the player just let lapse/declined, so a
+  // stale "go back to study" offer for the same program stops duplicating (idea 6).
+  if (
+    hasRecentEquivalentOffer(
+      world.opportunities,
+      `EDUCATION_ENROLMENT:${program.programId}`,
+      world.month,
+      OFFER_REOFFER_COOLDOWN_MONTHS,
+    )
+  ) {
+    return null;
+  }
 
   const oppId = `OPP_${program.programId}_${world.month}`;
   const decId = `DEC_${program.programId}_${world.month}`;

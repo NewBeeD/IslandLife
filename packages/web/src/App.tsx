@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type {
   CommunityDTO,
   FeedEntryDTO,
@@ -15,6 +15,10 @@ import { Opportunities } from './views/Opportunities';
 
 type View = 'daily' | 'community' | 'money' | 'opportunities';
 
+// The current life is auto-saved every month server-side; we remember which save it
+// is here so the player can close the tab and pick up exactly where they left off.
+const SAVE_KEY = 'islandlife.saveId';
+
 export function App() {
   const [saveId, setSaveId] = useState<string | null>(null);
   const [view, setView] = useState<View>('daily');
@@ -24,6 +28,7 @@ export function App() {
   const [community, setCommunity] = useState<CommunityDTO | null>(null);
   const [opportunities, setOpportunities] = useState<OpportunitiesDTO | null>(null);
   const [busy, setBusy] = useState(false);
+  const [resuming, setResuming] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async (id: string) => {
@@ -41,6 +46,30 @@ export function App() {
     setOpportunities(o);
   }, []);
 
+  // On first load, resume the stored save if there is one. A stale id (e.g. the save
+  // no longer exists) is cleared and the player starts a fresh life.
+  useEffect(() => {
+    const stored = localStorage.getItem(SAVE_KEY);
+    if (!stored) {
+      setResuming(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        await refresh(stored);
+        if (!cancelled) setSaveId(stored);
+      } catch {
+        localStorage.removeItem(SAVE_KEY);
+      } finally {
+        if (!cancelled) setResuming(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refresh]);
+
   const begin = useCallback(
     async (creationChoices: CreationChoicesInput, name: string) => {
       setBusy(true);
@@ -51,6 +80,7 @@ export function App() {
           creationChoices,
           ...(name ? { playerName: name } : {}),
         });
+        localStorage.setItem(SAVE_KEY, created.saveId);
         setSaveId(created.saveId);
         await refresh(created.saveId);
       } catch (e) {
@@ -61,6 +91,16 @@ export function App() {
     },
     [refresh],
   );
+
+  // Leave the current life behind and start over. The old save stays on the server;
+  // the player simply begins a new one.
+  const newLife = useCallback(() => {
+    if (!window.confirm('Start a new life? Your current one will be left behind.')) return;
+    localStorage.removeItem(SAVE_KEY);
+    setSaveId(null);
+    setState(null);
+    setView('daily');
+  }, []);
 
   const advance = useCallback(async () => {
     if (!saveId) return;
@@ -75,6 +115,14 @@ export function App() {
       setBusy(false);
     }
   }, [saveId, refresh]);
+
+  if (resuming) {
+    return (
+      <main className="app app--loading">
+        <p className="muted">Picking up where you left off…</p>
+      </main>
+    );
+  }
 
   if (!saveId || !state) {
     return <CharacterCreation busy={busy} error={error} onComplete={begin} />;
@@ -140,6 +188,9 @@ export function App() {
       <footer className="advance">
         <button className="primary" onClick={advance} disabled={busy}>
           {busy ? 'A month passes…' : 'Advance to next month'}
+        </button>
+        <button className="advance__newlife" onClick={newLife} disabled={busy}>
+          Start a new life
         </button>
       </footer>
     </main>

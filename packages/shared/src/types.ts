@@ -483,6 +483,53 @@ export interface Opportunity {
   partnership?: PartnershipSpec; // present for PARTNERSHIP opportunities (Phase 11)
 }
 
+// The logical identity of an offer — the (kind, target) it concerns, independent of
+// the random per-month `id`. Two opportunities with the same key are the *same*
+// offer surfaced at different times (e.g. the juice-stand new venture, or a given
+// upgrade rung). Used to suppress duplicate surfacing (P13.1) and to dedupe the
+// "Passed" projection (P13.2) so lapsed offers stop piling up.
+export function opportunityLogicalKey(opp: Opportunity): string {
+  switch (opp.kind) {
+    case 'EUNICE_SUPPLY_CONTRACT':
+      return 'EUNICE_SUPPLY_CONTRACT';
+    case 'ASSET_UPGRADE':
+      return `ASSET_UPGRADE:${opp.ventureId ?? ''}:${opp.upgrade?.id ?? ''}`;
+    case 'EDUCATION_ENROLMENT':
+      return `EDUCATION_ENROLMENT:${opp.enrolment?.programId ?? ''}`;
+    case 'NEW_VENTURE':
+      return `NEW_VENTURE:${opp.newVenture?.id ?? ''}`;
+    case 'CROWDFUND':
+      return `CROWDFUND:${opp.crowdfund?.ventureId ?? ''}`;
+    case 'PARTNERSHIP':
+      return `PARTNERSHIP:${opp.partnership?.partnerId ?? ''}:${opp.partnership?.id ?? ''}`;
+  }
+}
+
+// Whether a logically-equivalent offer (same `opportunityLogicalKey`) is already
+// live (OPEN/ACCEPTED) or only recently lapsed — within `cooldownMonths` of its
+// window closing. Surfacing consults this so the same offer is not re-pushed while
+// one is in flight or freshly gone, keyed by the logical offer, not the random id.
+export function hasRecentEquivalentOffer(
+  opportunities: Opportunity[],
+  key: string,
+  currentMonth: number,
+  cooldownMonths: number,
+): boolean {
+  for (const o of opportunities) {
+    if (opportunityLogicalKey(o) !== key) continue;
+    if (o.status === 'OPEN' || o.status === 'ACCEPTED') return true;
+    // EXPIRED / DECLINED: only suppress while still within the re-offer cooldown.
+    if (currentMonth - (o.surfacedMonth + o.windowMonths) < cooldownMonths) return true;
+  }
+  return false;
+}
+
+// Months a lapsed generative offer is suppressed before the same logical offer may
+// surface again (P13.1). Long enough that a declined/expired juice stand or upgrade
+// rung does not immediately re-appear and pile up duplicate "Passed" rows; short
+// enough that a genuinely-wanted offer eventually comes round again.
+export const OFFER_REOFFER_COOLDOWN_MONTHS = 9;
+
 // One unlabelled option. `label`/`description` are neutral player-facing prose (no
 // "safe"/"risky"); `effect` is the hidden mechanical resolution.
 export interface DecisionOption {
