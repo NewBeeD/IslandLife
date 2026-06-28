@@ -1,5 +1,6 @@
 import type {
   BankState,
+  BarrierTier,
   CompanyStatus,
   CredentialLevel,
   EmploymentStatus,
@@ -172,6 +173,10 @@ export interface Venture {
   monthlyOperatingCosts: number; // EC$/month fuel & upkeep across this venture's assets
   assets: Asset[]; // assets owned by this venture (financed upgrades land here)
   status: 'ACTIVE' | 'CLOSED';
+  // The venture's barrier to entry (Phase 10). Only LOW-barrier ventures saturate —
+  // their SPOT income scales down as more people crowd the same trade in the parish.
+  // Optional: undefined behaves as a non-saturating venture (the Phase 8 path).
+  barrierTier?: BarrierTier;
 }
 
 export interface NPCAgent {
@@ -312,8 +317,33 @@ export interface LegacyScore {
 // only prose + neutral option text — `monthlyAmount`, `expectedReturn`, and the
 // option `effect` never cross the wire (S3, the iceberg).
 
-export type OpportunityKind = 'EUNICE_SUPPLY_CONTRACT' | 'ASSET_UPGRADE' | 'EDUCATION_ENROLMENT';
+export type OpportunityKind =
+  | 'EUNICE_SUPPLY_CONTRACT'
+  | 'ASSET_UPGRADE'
+  | 'EDUCATION_ENROLMENT'
+  | 'NEW_VENTURE';
 export type OpportunityStatus = 'OPEN' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
+
+// The hidden spec of a new-venture opportunity (Phase 10). Cross-domain entry: a
+// boat, a minibus route, a roadside juice stand — capital up front (cash and/or a
+// financed loan, through the same financing slider as an upgrade) to stand up a
+// brand-new income stream alongside whatever the player already does. `riskLevel`
+// and `barrierTier` are hidden mechanics; the player reads the trade-off in prose.
+export interface NewVentureSpec {
+  id: string; // stable catalogue identity
+  industry: Industry;
+  label: string; // the thing being started: "a roadside juice stand"
+  ventureLabel: string; // the resulting venture's player-facing label: "the juice stand"
+  entryCost: number; // EC$ up front (equipment/stock) — financeable
+  startingOutputIncome: number; // base monthly SPOT take before scaling, seasonality & saturation
+  operatingCost: number; // EC$/month fuel & upkeep
+  barrierTier: BarrierTier; // hidden — LOW hustles saturate (P10.3)
+  riskLevel: 'LOW' | 'MEDIUM' | 'MEDIUM_HIGH' | 'HIGH'; // hidden
+  minTermMonths: number;
+  maxTermMonths: number;
+  minCash?: number; // wealth gate (P10.4): hidden until the player can plausibly fund it
+  minCredential?: CredentialLevel; // a credential gate (Phase 9), absent → no gate
+}
 
 // The hidden spec of an asset-upgrade opportunity (Phase 7). A bigger boat, a
 // second minibus, more guest rooms — capital up front (cash and/or a financed
@@ -350,6 +380,7 @@ export interface Opportunity {
   // player ("venture 0"); set → the asset and output bump land on that venture.
   ventureId?: string;
   enrolment?: EducationProgram; // present for EDUCATION_ENROLMENT opportunities
+  newVenture?: NewVentureSpec; // present for NEW_VENTURE opportunities (Phase 10)
 }
 
 // One unlabelled option. `label`/`description` are neutral player-facing prose (no

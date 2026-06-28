@@ -4,6 +4,11 @@
 
 export type Tri = 'LOW' | 'MEDIUM' | 'HIGH';
 
+// The barrier to entry of a venture (Phase 10). LOW-barrier side hustles are cheap
+// and fast to start but their takings saturate as more people pile into the same
+// trade; MEDIUM/HIGH ventures cost more and unlock with capital/credentials.
+export type BarrierTier = Tri;
+
 export const PARISH_IDS = [
   'SAINT_GEORGE',
   'SAINT_JOHN',

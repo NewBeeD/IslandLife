@@ -27,30 +27,37 @@ function fishingWorld(seed = 11): WorldState {
   return world;
 }
 
+// The Eunice supply contract, isolated from the other kinds the same call may also
+// surface (Phase 7 upgrades, Phase 10 new ventures). Asserting by kind keeps these
+// P6.1 tests about the Eunice information-channel filter specifically.
+const eunice = (world: WorldState) =>
+  world.opportunities.filter((o) => o.kind === 'EUNICE_SUPPLY_CONTRACT');
+
 describe('P6.1 — opportunity surfacing (information-channel filter)', () => {
   it('surfaces the Eunice contract to a fishing player with enough local capital', () => {
     const world = fishingWorld();
-    const surfaced = surfaceOpportunities(world);
+    const surfaced = surfaceOpportunities(world).filter((o) => o.kind === 'EUNICE_SUPPLY_CONTRACT');
     expect(surfaced).toHaveLength(1);
-    expect(world.opportunities).toHaveLength(1);
-    expect(world.opportunities[0]!.id).toBe(EUNICE_OPPORTUNITY_ID);
-    expect(world.opportunities[0]!.status).toBe('OPEN');
-    expect(world.decisions).toHaveLength(1);
-    expect(world.decisions[0]!.id).toBe(EUNICE_DECISION_ID);
-    expect(world.decisions[0]!.options.length).toBeGreaterThanOrEqual(2);
+    expect(eunice(world)).toHaveLength(1);
+    expect(eunice(world)[0]!.id).toBe(EUNICE_OPPORTUNITY_ID);
+    expect(eunice(world)[0]!.status).toBe('OPEN');
+    const decision = world.decisions.find((d) => d.id === EUNICE_DECISION_ID);
+    expect(decision).toBeDefined();
+    expect(decision!.options.length).toBeGreaterThanOrEqual(2);
   });
 
   it('does not surface to a non-fishing player', () => {
     const world = fishingWorld();
     world.player.occupation = 'RETAIL';
-    expect(surfaceOpportunities(world)).toHaveLength(0);
-    expect(world.opportunities).toHaveLength(0);
+    surfaceOpportunities(world);
+    expect(eunice(world)).toHaveLength(0);
   });
 
   it('does not surface to a fishing player with little local social capital', () => {
     const world = fishingWorld();
     world.player.socialCapitalLocal = 0.1;
-    expect(surfaceOpportunities(world)).toHaveLength(0);
+    surfaceOpportunities(world);
+    expect(eunice(world)).toHaveLength(0);
   });
 
   it('does not surface in the opening months', () => {
@@ -62,8 +69,9 @@ describe('P6.1 — opportunity surfacing (information-channel filter)', () => {
   it('surfaces only once', () => {
     const world = fishingWorld();
     surfaceOpportunities(world);
-    expect(surfaceOpportunities(world)).toHaveLength(0);
-    expect(world.opportunities).toHaveLength(1);
+    const again = surfaceOpportunities(world).filter((o) => o.kind === 'EUNICE_SUPPLY_CONTRACT');
+    expect(again).toHaveLength(0);
+    expect(eunice(world)).toHaveLength(1);
   });
 
   it('expires an unanswered opportunity after its window', () => {

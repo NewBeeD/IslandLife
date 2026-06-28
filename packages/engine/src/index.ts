@@ -41,6 +41,9 @@ export {
   ventureIncomeLines,
   aggregateVentureIncome,
   totalOperatingCosts,
+  tradeOperatorCount,
+  ensurePlayerVentures,
+  ventureAssetType,
 } from './ventures';
 export {
   credentialLevelOf,

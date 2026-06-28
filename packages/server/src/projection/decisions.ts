@@ -29,14 +29,30 @@ function titleFor(decision: PlayerDecision, opp: Opportunity | undefined): strin
   }
   if (decision.kind === 'ASSET_UPGRADE') return 'A bigger step';
   if (decision.kind === 'EDUCATION_ENROLMENT') return opp?.enrolment ? `Study — ${opp.enrolment.name}` : 'Going back to study';
+  if (decision.kind === 'NEW_VENTURE') return opp?.newVenture ? `Something new — ${opp.newVenture.label}` : 'Something new';
   return 'A decision';
 }
 
-// Selectable loan terms for the financing slider, drawn from the asset's allowed
-// range (2-year increments, capped at the asset's max term).
-function termOptionsFor(opp: Opportunity): number[] {
-  const min = opp.upgrade?.minTermMonths ?? 24;
-  const max = opp.upgrade?.maxTermMonths ?? 60;
+// The financeable purchase behind a FINANCING decision — an asset upgrade or a new
+// venture's entry cost. Unifies the slider for both (Phase 10).
+function financeableSpec(
+  opp: Opportunity,
+): { label: string; price: number; minTermMonths: number; maxTermMonths: number } | undefined {
+  if (opp.upgrade) {
+    const u = opp.upgrade;
+    return { label: u.assetLabel, price: u.assetPrice, minTermMonths: u.minTermMonths, maxTermMonths: u.maxTermMonths };
+  }
+  if (opp.newVenture) {
+    const n = opp.newVenture;
+    return { label: n.label, price: n.entryCost, minTermMonths: n.minTermMonths, maxTermMonths: n.maxTermMonths };
+  }
+  return undefined;
+}
+
+// Selectable loan terms for the financing slider, drawn from the purchase's allowed
+// range (1-year increments, capped at the max term).
+function termOptionsFor(spec: { minTermMonths: number; maxTermMonths: number }): number[] {
+  const { minTermMonths: min, maxTermMonths: max } = spec;
   const opts: number[] = [];
   for (let t = min; t <= max; t += 12) opts.push(t);
   if (opts[opts.length - 1] !== max) opts.push(max);
@@ -44,15 +60,16 @@ function termOptionsFor(opp: Opportunity): number[] {
 }
 
 function financingFor(world: WorldState, opp: Opportunity | undefined): FinancingControlDTO | undefined {
-  if (!opp?.upgrade) return undefined;
+  const spec = opp ? financeableSpec(opp) : undefined;
+  if (!spec) return undefined;
   const cash = Math.floor(world.player.cash);
   return {
-    assetLabel: opp.upgrade.assetLabel,
-    assetPrice: opp.upgrade.assetPrice,
-    maxDownPayment: Math.min(opp.upgrade.assetPrice, cash),
+    assetLabel: spec.label,
+    assetPrice: spec.price,
+    maxDownPayment: Math.min(spec.price, cash),
     minDownPayment: 0,
     cashOnHand: cash,
-    termOptions: termOptionsFor(opp),
+    termOptions: termOptionsFor(spec),
   };
 }
 
@@ -65,15 +82,17 @@ export function toDecisionDTO(world: WorldState, decisionId: string): DecisionDT
   const status: DecisionDTO['status'] =
     decision.chosenOptionId !== null ? 'RESOLVED' : expired ? 'EXPIRED' : 'OPEN';
 
-  const isUpgrade = decision.kind === 'ASSET_UPGRADE';
+  // Asset upgrades and new ventures are financed interactively (the slider); the
+  // Eunice contract and education enrolment are a fixed option list.
+  const isFinancing = decision.kind === 'ASSET_UPGRADE' || decision.kind === 'NEW_VENTURE';
   const monthsLeft = opp ? opp.surfacedMonth + opp.windowMonths - world.month : 0;
   const window = expired
     ? 'The moment has passed.'
     : monthsLeft <= 1
-      ? isUpgrade
+      ? isFinancing
         ? 'The offer holds only this month.'
         : 'She needs an answer this month.'
-      : isUpgrade
+      : isFinancing
         ? 'It is there for now, but not forever.'
         : 'She is waiting on your word, but not forever.';
 
@@ -81,13 +100,13 @@ export function toDecisionDTO(world: WorldState, decisionId: string): DecisionDT
     id: decision.id,
     title: titleFor(decision, opp),
     situation: buildDecisionSituation(world, decision),
-    interaction: isUpgrade ? 'FINANCING' : 'OPTIONS',
+    interaction: isFinancing ? 'FINANCING' : 'OPTIONS',
     options: decision.options.map((o) => ({
       id: o.id,
       label: o.label,
       description: o.description,
     })),
-    financing: isUpgrade ? financingFor(world, opp) : undefined,
+    financing: isFinancing ? financingFor(world, opp) : undefined,
     status,
     window,
     chosenOptionId: decision.chosenOptionId,

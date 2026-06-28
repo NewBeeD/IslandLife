@@ -12,6 +12,7 @@ function titleFor(opp: Opportunity): string {
   if (opp.kind === 'EUNICE_SUPPLY_CONTRACT') return `Supply contract — ${opp.npcName}`;
   if (opp.kind === 'ASSET_UPGRADE' && opp.upgrade) return `A bigger step — ${opp.upgrade.assetLabel}`;
   if (opp.kind === 'EDUCATION_ENROLMENT' && opp.enrolment) return `Go back to study — ${opp.enrolment.name}`;
+  if (opp.kind === 'NEW_VENTURE' && opp.newVenture) return `Something new — ${opp.newVenture.label}`;
   return opp.npcName;
 }
 
@@ -45,12 +46,26 @@ function descriptionFor(opp: Opportunity): string {
       `until you finish. A qualification opens doors that stay shut to a person without it.`
     );
   }
+  if (opp.kind === 'NEW_VENTURE' && opp.newVenture) {
+    // The entry cost is public (you know what it asks to get in); the takings, the
+    // risk, and how crowded the trade is stay unstated — weighed in prose, not stats.
+    const nv = opp.newVenture;
+    const crowd =
+      nv.barrierTier === 'LOW'
+        ? 'Cheap and quick to start — and plenty of others could think the same.'
+        : 'A real step into work outside your trade, with the costs that come with it.';
+    return (
+      `${capitalise(nv.label)} for ${formatCurrency(nv.entryCost)}, a stream of money running ` +
+      `alongside what you already do. ${crowd} You would put down what you can and borrow the rest.`
+    );
+  }
   return 'An arrangement put to you.';
 }
 
 function sourceFor(opp: Opportunity): string {
   if (opp.kind === 'ASSET_UPGRADE') return `Word: through ${opp.npcName}.`;
   if (opp.kind === 'EDUCATION_ENROLMENT') return 'Notice: the community college intake.';
+  if (opp.kind === 'NEW_VENTURE') return 'Word: going round the place.';
   return `Heard: directly from ${opp.npcName}.`;
 }
 
@@ -61,6 +76,9 @@ function windowFor(opp: Opportunity, world: WorldState): string {
   }
   if (opp.kind === 'EDUCATION_ENROLMENT') {
     return monthsLeft <= 1 ? 'The intake closes this month.' : 'The intake is open for now.';
+  }
+  if (opp.kind === 'NEW_VENTURE') {
+    return monthsLeft <= 1 ? 'It will be gone by next month.' : 'It is there for now, but not forever.';
   }
   if (monthsLeft <= 1) return 'She needs an answer this month.';
   return 'She is waiting on your word, but not forever.';

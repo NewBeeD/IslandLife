@@ -135,10 +135,12 @@ describe('iceberg-leak contract (P-X1)', () => {
     world.player.socialCapitalLocal = 0.5;
     world.month = 3;
     surfaceOpportunities(world);
-    expect(world.opportunities.length).toBe(1);
+    // The Eunice contract surfaced (other kinds — a Phase 10 new venture — may too).
+    expect(world.opportunities.some((o) => o.kind === 'EUNICE_SUPPLY_CONTRACT')).toBe(true);
 
+    // The whole opportunities DTO — every surfaced kind — leaks no hidden mechanics.
     const opportunities = toOpportunitiesDTO(world);
-    expect(opportunities.active.length).toBe(1);
+    expect(opportunities.active.length).toBeGreaterThanOrEqual(1);
     assertNoLeak('opportunities', opportunities);
 
     const decision = toDecisionDTO(world, EUNICE_DECISION_ID);

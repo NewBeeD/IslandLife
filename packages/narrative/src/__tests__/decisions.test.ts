@@ -147,6 +147,55 @@ describe('Phase 9 — education reads in voice and leaks no mechanics', () => {
   });
 });
 
+// A near-broke fisher to whom only the low-barrier juice stand surfaces (a
+// cross-domain hustle), so the consequence exercises the saturation beat.
+function fisherWithNewVentureOffer(seed = 33): WorldState {
+  const world = buildWorld(seed, { population: 60 });
+  const p = world.player;
+  p.occupation = 'FISHING';
+  p.employmentStatus = 'SELF_EMPLOYED';
+  p.parish = 'SAINT_JOHN';
+  p.socialCapitalLocal = 0.1; // no Eunice
+  p.experience.fishing = 0.05; // no upgrade offer
+  p.cash = 200; // only the cheapest hustle clears its wealth gate
+  p.monthlyIncome = 800;
+  world.month = 4;
+  surfaceOpportunities(world);
+  return world;
+}
+
+describe('Phase 10 — the new-venture decision reads in voice and leaks no mechanics', () => {
+  it('frames the cross-domain choice and its trade-off without risk labels', () => {
+    const world = fisherWithNewVentureOffer();
+    const decision = world.decisions.find((d) => d.kind === 'NEW_VENTURE')!;
+    const situation = buildDecisionSituation(world, decision);
+    expect(situation.toLowerCase()).toContain('you');
+    // The genuine trade-off — a second stream against cost and crowding — in prose.
+    expect(situation.toLowerCase()).toMatch(/money|cost|alongside/);
+    expect(situation).not.toMatch(/expected|probability|risk level|%/i);
+  });
+
+  it('acknowledges taking it on without judging it', () => {
+    const world = fisherWithNewVentureOffer();
+    const decision = world.decisions.find((d) => d.kind === 'NEW_VENTURE')!;
+    const ack = buildDecisionAcknowledgement(world, decision);
+    expect(ack.toLowerCase()).toContain('your');
+    expect(ack).not.toMatch(/right|wrong|good choice|bad choice/i);
+  });
+
+  it('lands a valid saturation-beat MEMORY that never names it a decision', () => {
+    const world = fisherWithNewVentureOffer();
+    const decision = world.decisions.find((d) => d.kind === 'NEW_VENTURE')!;
+    const entry = generateConsequenceEntry(world, decision);
+    expect(entry.type).toBe('MEMORY');
+    const result = validateNarrativeEntry(entry.text, 'ANNUAL_REFLECTION');
+    expect(result.valid, result.issues.join('; ')).toBe(true);
+    expect(entry.text.toLowerCase()).not.toContain('decision');
+    // The "everybody's selling juice now" beat — crowding in prose, never a stat.
+    expect(entry.text.toLowerCase()).toMatch(/more|others|sellers/);
+  });
+});
+
 describe('P6.4 — the delayed consequence connects back without naming the choice', () => {
   for (const option of [EUNICE_OPTION_ACCEPT, EUNICE_OPTION_DECLINE]) {
     it(`is a valid MEMORY entry after choosing ${option}`, () => {

@@ -42,6 +42,7 @@ function standingAmount(decision: PlayerDecision): number | null {
 export function buildDecisionSituation(world: WorldState, decision: PlayerDecision): string {
   if (decision.kind === 'ASSET_UPGRADE') return buildUpgradeSituation(world, decision);
   if (decision.kind === 'EDUCATION_ENROLMENT') return buildEducationSituation(world, decision);
+  if (decision.kind === 'NEW_VENTURE') return buildNewVentureSituation(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'the buyer';
   const amount = standingAmount(decision);
@@ -112,11 +113,39 @@ function buildEducationSituation(world: WorldState, decision: PlayerDecision): s
   );
 }
 
+// The framing of a cross-domain new venture (Phase 10): a chance to start something
+// outside the trade the player already works — a boat, a route, a roadside stand.
+// The genuine trade-off — capital and a new set of worries against another stream of
+// money — stated in prose. A low-barrier hustle hints at how many are already at it.
+function buildNewVentureSituation(world: WorldState, decision: PlayerDecision): string {
+  const opp = findOpportunity(world, decision);
+  const spec = opp?.newVenture;
+  const place = parishName(world);
+  if (!spec) {
+    return `There is a chance to start something new on the side, if you can find the money for it.`;
+  }
+  const crowdLine =
+    spec.barrierTier === 'LOW'
+      ? `It is the kind of thing anyone can start, which is the catch — you would not be the ` +
+        `only one with the idea, and the more hands at it around ${place} the thinner the takings spread.`
+      : `It is a real step into a line of work you do not know the way you know your own — ` +
+        `another set of worries, another thing that can go wrong while your back is turned.`;
+  return (
+    `Word reaches you of ${spec.label} going — separate from what you already do, a stream of ` +
+    `money running alongside the rest. The cost to get into it is ${formatCurrency(spec.entryCost)}.\n\n` +
+    `${crowdLine}\n\n` +
+    `You could put down what you have and borrow the rest, or let it pass and keep your hands ` +
+    `on the work you know. Around ${place} a person is known by what they take on. Do you reach ` +
+    `for this one?`
+  );
+}
+
 // A short, in-voice acknowledgement of the choice just made — the line the
 // resolution returns. No outcome, no judgement; the consequence comes later.
 export function buildDecisionAcknowledgement(world: WorldState, decision: PlayerDecision): string {
   if (decision.kind === 'ASSET_UPGRADE') return buildUpgradeAcknowledgement(world, decision);
   if (decision.kind === 'EDUCATION_ENROLMENT') return buildEducationAcknowledgement(world, decision);
+  if (decision.kind === 'NEW_VENTURE') return buildNewVentureAcknowledgement(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'her';
   const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
@@ -134,6 +163,18 @@ function buildUpgradeAcknowledgement(world: WorldState, decision: PlayerDecision
   return (
     `It is done — ${label} is yours now. The work gets bigger from here, and so do the ` +
     `bills that come with it. Whatever the season brings, the asset is in your hands.`
+  );
+}
+
+// The acknowledgement after a new venture is taken on (Phase 10): the thing is yours
+// to run now, a second line of work and the bills that come with it. No outcome yet.
+function buildNewVentureAcknowledgement(world: WorldState, decision: PlayerDecision): string {
+  const opp = findOpportunity(world, decision);
+  const label = opp?.newVenture?.ventureLabel ?? 'the new venture';
+  return (
+    `It is done — ${label} is yours to run now, alongside everything else. A second thing ` +
+    `pulling on your time and your money, and a second chance at a bit more coming in. ` +
+    `What the work makes of it is for the months ahead to say.`
   );
 }
 
@@ -175,6 +216,7 @@ export function generateEducationCompletionEntry(world: WorldState, program: Enr
 // or the path not taken, simply shows up in the life. Passes the voice validator.
 export function generateConsequenceEntry(world: WorldState, decision: PlayerDecision): NarrativeEntry {
   if (decision.kind === 'ASSET_UPGRADE') return generateUpgradeConsequence(world, decision);
+  if (decision.kind === 'NEW_VENTURE') return generateNewVentureConsequence(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'Eunice';
   const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
@@ -217,6 +259,34 @@ function generateUpgradeConsequence(world: WorldState, decision: PlayerDecision)
     `the season does, and there were mornings you did the sums twice. You knew the shape of ` +
     `the bet when you made it. Some days it sits easy, some days it does not. You carry it ` +
     `either way, the way you carry everything you chose.`;
+  return {
+    type: 'MEMORY',
+    text,
+    month: world.month,
+    triggerId: `CONSEQUENCE:${decision.id}`,
+  };
+}
+
+// The delayed MEMORY after a new venture (Phase 10): how the second line of work has
+// bedded in. A low-barrier hustle carries the saturation beat — everybody's at it now
+// — without ever quoting a number; a bigger venture, the weight of the new bills.
+function generateNewVentureConsequence(world: WorldState, decision: PlayerDecision): NarrativeEntry {
+  const opp = findOpportunity(world, decision);
+  const spec = opp?.newVenture;
+  const label = spec?.ventureLabel ?? 'the new line of work';
+  const text =
+    spec?.barrierTier === 'LOW'
+      ? `${capitalise(label)} has settled into the run of your weeks. It brings something in, ` +
+        `which is what you wanted of it. The thing is, you were never going to be the only one — ` +
+        `there are more stands and more sellers at it now than when you started, all chasing the ` +
+        `same few coins from the same few pockets, and what comes in some weeks is thinner for it. ` +
+        `Other weeks it holds up fine. You take the work as it comes. It was never meant to be the ` +
+        `whole of anything.`
+      : `${capitalise(label)} has its own rhythm now, separate from the work you came up in. ` +
+        `Some of what you hoped for has come, and a share of trouble you did not fully see — the ` +
+        `costs land every month whether the money does or not, and there were mornings you did the ` +
+        `sums twice. You knew you were reaching past what you knew when you took it on. Some days ` +
+        `it sits easy, some days it does not. You carry it either way.`;
   return {
     type: 'MEMORY',
     text,

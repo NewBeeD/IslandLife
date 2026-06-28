@@ -1,7 +1,44 @@
-import { gameDateLabel } from '@island/shared';
+import { GOODS, REPRESENTATIVE_GOOD, gameDateLabel } from '@island/shared';
 import { activeVentures, hasVentures, netWorthOf, ventureIncomeLines } from '@island/engine';
-import type { AssetLine, DebtLine, MoneyDTO, MoneyLine, WorldState } from '@island/shared';
+import type {
+  AssetLine,
+  DebtLine,
+  Industry,
+  MarketWatchLine,
+  MoneyDTO,
+  MoneyLine,
+  WorldState,
+} from '@island/shared';
 import { INCOME_LINE_LABEL, assetLabel, bankLabel } from './labels';
+
+// The local market prices the player's SPOT income reads (P10.5). Market prices are
+// public (the NEWSPAPER channel) — surfacing them lets the player see why a venture's
+// income swings. Collected from the player's SPOT income sources, deduped by good.
+function buildMarketWatch(world: WorldState): MarketWatchLine[] {
+  const p = world.player;
+  const industries: Industry[] = [];
+  const add = (ind: Industry | null): void => {
+    if (ind && !industries.includes(ind)) industries.push(ind);
+  };
+  if (hasVentures(p)) {
+    for (const v of activeVentures(p)) if (v.incomeMode !== 'STANDING') add(v.industry);
+  } else if (p.incomeMode !== 'STANDING') {
+    add(p.occupation);
+  }
+
+  const lines: MarketWatchLine[] = [];
+  for (const industry of industries) {
+    const goodId = REPRESENTATIVE_GOOD[industry];
+    if (!goodId) continue;
+    const good = GOODS.find((g) => g.id === goodId);
+    const market = world.markets.find((m) => m.goodId === goodId && m.parish === p.parish);
+    if (!good || !market) continue;
+    const ratio = market.currentPrice / good.basePrice;
+    const trend: MarketWatchLine['trend'] = ratio >= 1.15 ? 'STRONG' : ratio <= 0.85 ? 'WEAK' : 'TYPICAL';
+    lines.push({ label: good.name, unit: good.unit, price: Math.round(market.currentPrice * 100) / 100, trend });
+  }
+  return lines;
+}
 
 // GET /saves/:id/money — the Money view. Income and expense lines reconstructed to
 // match what actually moved the player's cash this month (engine phase 5), plus
@@ -107,5 +144,6 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
     debts,
     netWorth: Math.round(netWorthOf(p)),
     notes,
+    marketWatch: buildMarketWatch(world),
   };
 }

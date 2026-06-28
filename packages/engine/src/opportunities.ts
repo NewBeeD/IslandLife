@@ -3,14 +3,22 @@ import type {
   CredentialLevel,
   DecisionOption,
   Industry,
+  NewVentureSpec,
   Opportunity,
   PlayerDecision,
   UpgradeSpec,
+  Venture,
   WorldState,
 } from '@island/shared';
 import { assessLoanApplication, originateLoan } from './banking';
 import type { LoanAssessment } from './banking';
-import { activeVentures, aggregateVentureIncome, hasVentures } from './ventures';
+import {
+  activeVentures,
+  aggregateVentureIncome,
+  ensurePlayerVentures,
+  hasVentures,
+  ventureAssetType,
+} from './ventures';
 import { credentialLevelOf, enrolPlayer, surfaceEducation } from './education';
 import { clamp } from './rng';
 
@@ -268,9 +276,121 @@ function surfaceUpgrade(world: WorldState): Opportunity | null {
   return opportunity;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 10 — cross-domain new ventures, side hustles, and saturation.
+//
+// Opportunities reach beyond the player's own trade: a fisher can buy a minibus, a
+// lecturer can run a boat. Low-barrier hustles (a roadside juice stand) are cheap
+// and always offerable but their takings saturate as more people pile in (P10.3,
+// applied in ventures.ts). Bigger plays gate on cash and credentials (P10.4). Each
+// accepted venture stands up a new income stream (Phase 8) funded through the same
+// financing slider as an upgrade (P7.6). Surfacing draws from world.rng for variety.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const NEW_VENTURE_CHANNEL = 'WORD_AROUND';
+const NEW_VENTURE_WINDOW = 3;
+const NEW_VENTURE_COOLDOWN = 2;
+const NEW_VENTURE_FROM_MONTH = 2;
+
+// Cross-domain entry catalogue across every industry and barrier tier. Prices in EC$.
+const NEW_VENTURE_CATALOGUE: NewVentureSpec[] = [
+  // LOW barrier — cheap, fast, always offerable; takings saturate as people crowd in.
+  { id: 'NV_JUICE', industry: 'RETAIL', label: 'a roadside juice and snack stand', ventureLabel: 'the juice stand', entryCost: 1500, startingOutputIncome: 650, operatingCost: 150, barrierTier: 'LOW', riskLevel: 'LOW', minTermMonths: 12, maxTermMonths: 24 },
+  { id: 'NV_RESALE', industry: 'INFORMAL_TRADE', label: 'a small resale line — phone cards, household bits', ventureLabel: 'the resale line', entryCost: 2200, startingOutputIncome: 750, operatingCost: 180, barrierTier: 'LOW', riskLevel: 'MEDIUM', minTermMonths: 12, maxTermMonths: 24 },
+  // MEDIUM barrier — a real piece of kit, some capital, steadier money.
+  { id: 'NV_PROVISION', industry: 'AGRICULTURE', label: 'a rented provision plot and tools', ventureLabel: 'the provision garden', entryCost: 12000, startingOutputIncome: 1100, operatingCost: 250, barrierTier: 'MEDIUM', riskLevel: 'MEDIUM', minTermMonths: 24, maxTermMonths: 60, minCash: 2500 },
+  { id: 'NV_PIROGUE', industry: 'FISHING', label: 'a small pirogue and an outboard', ventureLabel: 'the boat', entryCost: 22000, startingOutputIncome: 1600, operatingCost: 450, barrierTier: 'MEDIUM', riskLevel: 'MEDIUM_HIGH', minTermMonths: 24, maxTermMonths: 60, minCash: 4000 },
+  { id: 'NV_MINIBUS', industry: 'TRANSPORTATION', label: 'a second-hand minibus and a route', ventureLabel: 'the minibus', entryCost: 35000, startingOutputIncome: 2200, operatingCost: 900, barrierTier: 'MEDIUM', riskLevel: 'MEDIUM_HIGH', minTermMonths: 24, maxTermMonths: 60, minCash: 6000 },
+  // HIGH barrier — a substantial play; gated on real capital.
+  { id: 'NV_SHOP', industry: 'RETAIL', label: 'a rented shopfront and opening stock', ventureLabel: 'the shop', entryCost: 45000, startingOutputIncome: 2600, operatingCost: 600, barrierTier: 'HIGH', riskLevel: 'HIGH', minTermMonths: 36, maxTermMonths: 72, minCash: 9000 },
+  { id: 'NV_GUESTROOMS', industry: 'TOURISM', label: 'a couple of rooms set up to let to visitors', ventureLabel: 'the guest rooms', entryCost: 60000, startingOutputIncome: 2800, operatingCost: 700, barrierTier: 'HIGH', riskLevel: 'HIGH', minTermMonths: 36, maxTermMonths: 84, minCash: 12000 },
+  // Credential-gated — the formal sector only opens to a qualification (Phase 9).
+  { id: 'NV_BOOKKEEPING', industry: 'FINANCE', label: 'a small bookkeeping practice for local traders', ventureLabel: 'the bookkeeping practice', entryCost: 8000, startingOutputIncome: 2400, operatingCost: 300, barrierTier: 'HIGH', riskLevel: 'MEDIUM', minTermMonths: 12, maxTermMonths: 36, minCash: 2000, minCredential: 'DEGREE' },
+];
+
+// Whether the player already works a given trade (an active venture in it, or — for
+// a single-stream player — their occupation). Used so new ventures are cross-domain.
+function playerRunsIndustry(world: WorldState, industry: Industry): boolean {
+  const p = world.player;
+  if (hasVentures(p)) return activeVentures(p).some((v) => v.industry === industry);
+  return p.occupation === industry;
+}
+
+// The minimum cash to be offered a venture (P10.4 wealth gate): an explicit floor, or
+// a tenth of the entry cost so a player who could not plausibly fund it isn't teased.
+function ventureCashGate(spec: NewVentureSpec): number {
+  return spec.minCash ?? Math.round(spec.entryCost * 0.1);
+}
+
+// The new ventures the player could be offered now: cross-domain, past the credential
+// gate, and within the wealth gate.
+function eligibleNewVentures(world: WorldState): NewVentureSpec[] {
+  const p = world.player;
+  const credential = credentialLevelOf(p);
+  return NEW_VENTURE_CATALOGUE.filter((spec) => {
+    if (playerRunsIndustry(world, spec.industry)) return false;
+    if (spec.minCredential && credentialRank(credential) < credentialRank(spec.minCredential)) return false;
+    return p.cash >= ventureCashGate(spec);
+  });
+}
+
+// One new-venture offer at a time, with a short cooldown after one lapses or is taken.
+function newVentureOnCooldown(world: WorldState): boolean {
+  let lastClosed = -Infinity;
+  for (const o of world.opportunities) {
+    if (o.kind !== 'NEW_VENTURE') continue;
+    if (o.status === 'OPEN') return true;
+    const closed = o.surfacedMonth + o.windowMonths;
+    if (closed > lastClosed) lastClosed = closed;
+  }
+  return world.month - lastClosed < NEW_VENTURE_COOLDOWN;
+}
+
+// Surface a cross-domain new-venture offer if one is eligible (P10.1). Picks from the
+// eligible set via world.rng for variety; a low-barrier hustle is essentially always
+// among them, so there is usually something to start (P10.2). The decision is
+// financed interactively (the slider), like an asset upgrade.
+function surfaceNewVenture(world: WorldState): Opportunity | null {
+  if (world.month < NEW_VENTURE_FROM_MONTH || newVentureOnCooldown(world)) return null;
+  const eligible = eligibleNewVentures(world);
+  if (eligible.length === 0) return null;
+  const spec = world.rng.pick(eligible);
+
+  const oppId = `OPP_${spec.id}_${world.month}`;
+  const decId = `DEC_${spec.id}_${world.month}`;
+  const opportunity: Opportunity = {
+    id: oppId,
+    kind: 'NEW_VENTURE',
+    industry: spec.industry,
+    npcName: 'someone looking to pass it on',
+    channelId: NEW_VENTURE_CHANNEL,
+    surfacedMonth: world.month,
+    windowMonths: NEW_VENTURE_WINDOW,
+    status: 'OPEN',
+    decisionId: decId,
+    monthlyAmount: 0,
+    newVenture: spec,
+  };
+  const decision: PlayerDecision = {
+    id: decId,
+    opportunityId: oppId,
+    kind: 'NEW_VENTURE',
+    surfacedMonth: world.month,
+    windowMonths: NEW_VENTURE_WINDOW,
+    options: [], // financed interactively (the slider), not a fixed option list
+    chosenOptionId: null,
+    resolvedMonth: null,
+    consequenceMonth: null,
+    consequenceDelivered: false,
+  };
+  world.opportunities.push(opportunity);
+  world.decisions.push(decision);
+  return opportunity;
+}
+
 // The information-channel filter (P6.1). Expires stale offers and surfaces newly
 // available ones. Returns the opportunities that became visible this call (so the
-// server can note them). Deterministic — reads world state, never world.rng.
+// server can note them). Deterministic in (world state, world.rng).
 export function surfaceOpportunities(world: WorldState): Opportunity[] {
   // Expire any OPEN opportunity whose window has closed unanswered.
   for (const opp of world.opportunities) {
@@ -319,6 +439,11 @@ export function surfaceOpportunities(world: WorldState): Opportunity[] {
   // Education enrolment — a way to invest in a credential (Phase 9).
   const enrolment = surfaceEducation(world);
   if (enrolment) surfaced.push(enrolment);
+
+  // Cross-domain new ventures & side hustles — diversify beyond the player's trade
+  // (Phase 10). Surfaced last so the existing decisions keep their stable ordering.
+  const newVenture = surfaceNewVenture(world);
+  if (newVenture) surfaced.push(newVenture);
 
   return surfaced;
 }
@@ -388,35 +513,62 @@ export function resolveDecision(
   return decision;
 }
 
-// ── Asset-upgrade financing (Phase 7) ───────────────────────────────────────
+// ── Financed purchases: asset upgrades (Phase 7) & new ventures (Phase 10) ───
+//
+// Both an upgrade and a new venture are bought through the same financing slider:
+// a price up front, paid in cash and/or a bank loan, the bank's amount authoritative.
+// `Financeable` is the common shape behind either kind so one quote/resolve path
+// serves both; resolution then branches on the kind (grow an asset vs. stand up a
+// venture).
 
-// Locate an open ASSET_UPGRADE decision and its spec, or throw the right
-// DecisionError (mirrors the validation in resolveDecision).
-function findUpgrade(
+interface Financeable {
+  label: string; // the thing being bought/started
+  price: number; // EC$ up front
+  minTermMonths: number;
+  maxTermMonths: number;
+}
+
+// The financeable purchase behind an opportunity, or null if it has none.
+function financeableOf(opp: Opportunity): Financeable | null {
+  if (opp.upgrade) {
+    const u = opp.upgrade;
+    return { label: u.assetLabel, price: u.assetPrice, minTermMonths: u.minTermMonths, maxTermMonths: u.maxTermMonths };
+  }
+  if (opp.newVenture) {
+    const n = opp.newVenture;
+    return { label: n.label, price: n.entryCost, minTermMonths: n.minTermMonths, maxTermMonths: n.maxTermMonths };
+  }
+  return null;
+}
+
+// Locate an open financed decision (ASSET_UPGRADE or NEW_VENTURE) and its purchase,
+// or throw the right DecisionError (mirrors the validation in resolveDecision).
+function findFinanceable(
   world: WorldState,
   decisionId: string,
-): { decision: PlayerDecision; opportunity: Opportunity; spec: UpgradeSpec } {
+): { decision: PlayerDecision; opportunity: Opportunity; spec: Financeable } {
   const decision = world.decisions.find((d) => d.id === decisionId);
-  if (!decision || decision.kind !== 'ASSET_UPGRADE') {
-    throw new DecisionError(`upgrade decision ${decisionId} not found`, 'NOT_FOUND');
+  if (!decision || (decision.kind !== 'ASSET_UPGRADE' && decision.kind !== 'NEW_VENTURE')) {
+    throw new DecisionError(`financed decision ${decisionId} not found`, 'NOT_FOUND');
   }
   if (decision.chosenOptionId !== null) {
     throw new DecisionError(`decision ${decisionId} already resolved`, 'ALREADY_RESOLVED');
   }
   const opportunity = world.opportunities.find((o) => o.id === decision.opportunityId);
-  if (!opportunity || !opportunity.upgrade) {
-    throw new DecisionError(`upgrade opportunity for ${decisionId} not found`, 'NOT_FOUND');
+  const spec = opportunity ? financeableOf(opportunity) : null;
+  if (!opportunity || !spec) {
+    throw new DecisionError(`financed opportunity for ${decisionId} not found`, 'NOT_FOUND');
   }
   if (opportunity.status === 'EXPIRED') {
     throw new DecisionError(`decision ${decisionId} has expired`, 'EXPIRED');
   }
-  return { decision, opportunity, spec: opportunity.upgrade };
+  return { decision, opportunity, spec };
 }
 
 // Clamp a requested down payment to what the player can actually put down: between
-// nothing and the lesser of the asset's price and the cash on hand.
-function clampDown(world: WorldState, spec: UpgradeSpec, downPayment: number): number {
-  const max = Math.min(spec.assetPrice, world.player.cash);
+// nothing and the lesser of the price and the cash on hand.
+function clampDown(world: WorldState, price: number, downPayment: number): number {
+  const max = Math.min(price, world.player.cash);
   return clamp(Math.round(downPayment), 0, Math.max(0, Math.floor(max)));
 }
 
@@ -427,22 +579,23 @@ export interface UpgradeQuote extends LoanAssessment {
   requestedLoan: number;
 }
 
-// Read-only financing quote for an upgrade decision — the financing slider polls
-// this as the player drags the down payment. Pure and deterministic; never mutates.
+// Read-only financing quote for a financed decision — the slider polls this as the
+// player drags the down payment. Serves upgrades and new ventures alike. Pure and
+// deterministic; never mutates.
 export function quoteUpgradeFinancing(
   world: WorldState,
   decisionId: string,
   downPayment: number,
   termMonths: number,
 ): UpgradeQuote {
-  const { spec } = findUpgrade(world, decisionId);
-  const cappedDown = clampDown(world, spec, downPayment);
-  const requestedLoan = Math.max(0, spec.assetPrice - cappedDown);
-  const assessment = assessLoanApplication(world, world.player, requestedLoan, termMonths, spec.assetPrice);
+  const { spec } = findFinanceable(world, decisionId);
+  const cappedDown = clampDown(world, spec.price, downPayment);
+  const requestedLoan = Math.max(0, spec.price - cappedDown);
+  const assessment = assessLoanApplication(world, world.player, requestedLoan, termMonths, spec.price);
   return {
     ...assessment,
-    assetLabel: spec.assetLabel,
-    assetPrice: spec.assetPrice,
+    assetLabel: spec.label,
+    assetPrice: spec.price,
     downPayment: cappedDown,
     requestedLoan,
   };
@@ -457,32 +610,67 @@ export interface UpgradeResolution {
   monthlyPayment: number;
 }
 
-// Resolve an upgrade decision with a chosen down payment and term: assess the loan,
-// take the down payment in cash, originate the (approved) loan, buy the asset, and
-// raise the player's output and operating costs. The bank's amount is authoritative
-// — a COUNTER is honoured by covering the shortfall in cash; a DECLINE or an
-// unaffordable down payment throws. Pure (mutates the world, never world.rng).
+// Resolve a financed decision with a chosen down payment and term: assess the loan,
+// take the down payment in cash, originate the (approved) loan, and then either grow
+// an asset (ASSET_UPGRADE) or stand up a new income stream (NEW_VENTURE). The bank's
+// amount is authoritative — a COUNTER is honoured by covering the shortfall in cash;
+// a DECLINE or an unaffordable down payment throws. Pure (mutates the world, never
+// world.rng).
 export function applyUpgradeFinancing(
   world: WorldState,
   decisionId: string,
   downPayment: number,
   termMonths: number,
 ): UpgradeResolution {
-  const { decision, opportunity, spec } = findUpgrade(world, decisionId);
+  const { decision, opportunity, spec } = findFinanceable(world, decisionId);
   const p = world.player;
-  const cappedDown = clampDown(world, spec, downPayment);
-  const requestedLoan = Math.max(0, spec.assetPrice - cappedDown);
-  const a = assessLoanApplication(world, p, requestedLoan, termMonths, spec.assetPrice);
+  const cappedDown = clampDown(world, spec.price, downPayment);
+  const requestedLoan = Math.max(0, spec.price - cappedDown);
+  const a = assessLoanApplication(world, p, requestedLoan, termMonths, spec.price);
   if (a.outcome === 'DECLINED') throw new DecisionError(a.reason, 'BAD_OPTION');
 
   // Honour the bank's amount: APPROVED lends the request; COUNTER lends less, so the
   // player must cover the larger remaining cost in cash.
   const principal = a.approvedPrincipal;
-  const effectiveDown = spec.assetPrice - principal;
+  const effectiveDown = spec.price - principal;
   if (p.cash < effectiveDown) {
     throw new DecisionError('You do not have the cash for that down payment.', 'BAD_OPTION');
   }
 
+  if (opportunity.kind === 'NEW_VENTURE' && opportunity.newVenture) {
+    applyNewVenture(world, opportunity.newVenture, effectiveDown, a, principal);
+  } else if (opportunity.upgrade) {
+    applyUpgrade(world, opportunity, opportunity.upgrade, effectiveDown, a, principal);
+  } else {
+    throw new DecisionError(`financed opportunity for ${decisionId} not found`, 'NOT_FOUND');
+  }
+
+  decision.chosenOptionId = 'ACCEPT_UPGRADE';
+  decision.resolvedMonth = world.month;
+  decision.consequenceMonth = world.month + CONSEQUENCE_LAG_MONTHS;
+  opportunity.status = 'ACCEPTED';
+
+  return {
+    decision,
+    assetLabel: spec.label,
+    downPayment: effectiveDown,
+    principal,
+    interestRate: a.interestRate,
+    monthlyPayment: a.monthlyPayment,
+  };
+}
+
+// Grow an asset upgrade (Phase 7/8): take the down payment, book the loan, and bump
+// the targeted venture (or the implicit single-stream player) output & costs.
+function applyUpgrade(
+  world: WorldState,
+  opportunity: Opportunity,
+  spec: UpgradeSpec,
+  effectiveDown: number,
+  a: LoanAssessment,
+  principal: number,
+): void {
+  const p = world.player;
   p.cash -= effectiveDown;
 
   // Phase 8: an upgrade may target a specific venture; otherwise it grows the
@@ -534,20 +722,48 @@ export function applyUpgradeFinancing(
       p.spotBaseIncome = p.spotBaseIncome ?? p.monthlyIncome;
     }
   }
+}
 
-  decision.chosenOptionId = 'ACCEPT_UPGRADE';
-  decision.resolvedMonth = world.month;
-  decision.consequenceMonth = world.month + CONSEQUENCE_LAG_MONTHS;
-  opportunity.status = 'ACCEPTED';
+// Stand up a new venture (Phase 10): materialize the player's existing income as
+// "venture 0" so the new stream earns alongside it, take the down payment, book the
+// loan, and push the new ACTIVE venture (carrying its starting equipment & barrier).
+function applyNewVenture(
+  world: WorldState,
+  spec: NewVentureSpec,
+  effectiveDown: number,
+  a: LoanAssessment,
+  principal: number,
+): void {
+  const p = world.player;
+  ensurePlayerVentures(world);
+  p.cash -= effectiveDown;
 
-  return {
-    decision,
-    assetLabel: spec.assetLabel,
-    downPayment: effectiveDown,
-    principal,
-    interestRate: a.interestRate,
-    monthlyPayment: a.monthlyPayment,
+  if (principal > 0) {
+    originateLoan(
+      world, p, a.bankId, principal, a.interestRate, a.monthlyPayment, a.termMonths, spec.industry,
+    );
+  }
+
+  const ventureId = `VEN_${spec.id}_${world.month}`;
+  const venture: Venture = {
+    id: ventureId,
+    industry: spec.industry,
+    label: spec.ventureLabel,
+    incomeMode: 'SPOT',
+    spotBaseIncome: spec.startingOutputIncome,
+    standingContract: null,
+    outputScale: 1,
+    monthlyOperatingCosts: spec.operatingCost,
+    assets:
+      spec.entryCost > 0
+        ? [{ id: `${spec.id}@${ventureId}`, type: ventureAssetType(spec.industry), value: spec.entryCost }]
+        : [],
+    status: 'ACTIVE',
+    barrierTier: spec.barrierTier,
   };
+  (p.ventures ??= []).push(venture);
+  // Reflect the new stream in monthly income immediately (recomputed each advance).
+  p.monthlyIncome = aggregateVentureIncome(world);
 }
 
 // Apply the player's chosen income behaviour for the month. Called by the server

@@ -89,6 +89,27 @@ export function Money({ money }: { money: MoneyDTO }) {
         </section>
       )}
 
+      {money.marketWatch && money.marketWatch.length > 0 && (
+        <section className="money__section">
+          <h3>At the market</h3>
+          {money.marketWatch.map((m, i) => (
+            <div className="money__line" key={i}>
+              <span>{m.label}</span>
+              <span>
+                EC${m.price.toLocaleString('en-US')}/{m.unit}
+              </span>
+              <span className="muted">
+                {m.trend === 'STRONG'
+                  ? 'fetching a strong price'
+                  : m.trend === 'WEAK'
+                    ? 'a poor price right now'
+                    : 'about the usual'}
+              </span>
+            </div>
+          ))}
+        </section>
+      )}
+
       <div className="money__networth">
         <span>Net worth</span>
         <strong>{ec(money.netWorth)}</strong>

@@ -6,17 +6,19 @@ of work with an acceptance test, the files it touches, and its dependencies.
 
 - **Design source of truth:** the five `island_life_*.md` docs.
 - **Build sequence:** `island_life_technical_architecture.md` → "Build Sequence".
-- **Current state:** Phases 0–9 complete (scaffold, headless engine, persistence,
+- **Current state:** Phases 0–10 complete (scaffold, headless engine, persistence,
   character creation, the Fastify API + iceberg projection + template narrative
   + React/Vite client, the Layer-2 Claude Opus 4.8 narrative, the vertical
   slice — one unlabelled decision loop with a delayed consequence, the grounded
   livelihoods + generative opportunity + bank financing + real money view of
   Phase 7, the Phase 8 venture portfolio — concurrent income streams that sum each
-  month, and Phase 9 education & credentials — programs that drain tuition over
-  months, raise knowledge, and unlock credential-gated opportunities). **Next
-  (Phases 10–11) — the diversified economy:** cross-domain opportunities +
-  saturating side hustles, and equity/crowdfunding/NPC partnerships. Then the
-  post-slice backlog (P-B1 firm formation onward).
+  month, Phase 9 education & credentials — programs that drain tuition over
+  months, raise knowledge, and unlock credential-gated opportunities, and Phase 10
+  diversified opportunities — cross-domain new ventures financed through the same
+  slider, low-barrier side hustles that saturate as a parish trade crowds, and a
+  market-watch line on the money view). **Next (Phase 11) — the diversified
+  economy continues:** equity/crowdfunding/NPC partnerships. Then the post-slice
+  backlog (P-B1 firm formation onward).
 
 ## How to read this
 
@@ -518,7 +520,7 @@ These are the guardrails I follow on every change; they're not steps, they're co
 
 ---
 
-## Phase 10 — Diversified opportunities, side hustles & saturation 🔜 PLANNED
+## Phase 10 — Diversified opportunities, side hustles & saturation ✅ DONE
 
 > Goal: opportunities reach **beyond the player's trade** (buy a boat or run a bus
 > whatever your job); **low-barrier side hustles** exist but **saturate** as more
@@ -573,9 +575,30 @@ These are the guardrails I follow on every change; they're not steps, they're co
   `web/views/Opportunities.tsx`. *Acceptance:* the prose passes the voice validator;
   no raw saturation number crosses the wire.
 
-- *Phase acceptance:* a lecturer simultaneously runs salary + a boat venture + a
-  saturating juice hustle; wealthier players see bigger plays unlock; iceberg clean;
-  digest updated with a note.
+- *Phase acceptance:* ✅ `typecheck` + `typecheck:web` + `npm test` green (120
+  tests; +7 for Phase 10). A salaried lecturer is offered a cross-domain venture
+  outside their trade; accepting materializes the existing income as an explicit
+  "venture 0" (`ensurePlayerVentures`) and stands the new stream up beside it, so the
+  salary keeps earning while the boat earns too. A near-broke fisher is always
+  offered the low-barrier juice stand (a cross-domain hustle clears its tenth-of-cost
+  wealth gate); its takings fall as RETAIL operators crowd the parish and recover
+  exactly to the uncrowded take as they leave — deterministic per seed. Wealthier
+  players unlock the HIGH-barrier plays a broke player never sees (P10.4). New
+  ventures and asset upgrades now share one financing path (`findFinanceable` /
+  `applyUpgradeFinancing` branch on kind), funded through the same down-payment +
+  loan slider. The money view carries an "At the market" line (`MarketWatchLine`,
+  P10.5) showing the public local prices the player's SPOT ventures read, so income
+  swings have a visible cause; explicit buy/sell trading stays deferred. Narrative
+  frames cross-domain entry and renders the "everybody's selling juice now"
+  saturation beat in prose — no raw saturation number crosses the wire (iceberg
+  clean). New `NEW_VENTURE` opportunity kind + `NewVentureSpec` catalogue (8 entries
+  across every industry / barrier tier, one credential-gated); saturation in
+  `engine/ventures.ts` (`tradeOperatorCount`, `lowBarrierSaturationFactor`); 4 tests
+  in `newVentures.test.ts` + 3 in `decisions.test.ts`. The Phase 6.1 / iceberg tests
+  now assert the Eunice contract **by kind** (a new venture may surface alongside it).
+  The determinism digest changes from Phase 9 — `surfaceNewVenture` draws `world.rng`
+  for an eligible baseline player — but stays self-consistent per seed; this is
+  expected and additive (no replay regression beyond the new draw).
 
 ---
 

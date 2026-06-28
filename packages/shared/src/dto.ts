@@ -55,6 +55,16 @@ export interface DebtLine {
   monthsLeft: number;
 }
 
+// A local market price the player's SPOT income reads (Phase 10, P10.5). Market
+// prices are public information (the NEWSPAPER channel) — showing them lets the
+// player see why a venture's income swings month to month. No hidden mechanics.
+export interface MarketWatchLine {
+  label: string; // "Fresh fish (local)"
+  unit: string; // "lb"
+  price: number; // EC$ per unit, current local price
+  trend: 'STRONG' | 'TYPICAL' | 'WEAK'; // current price vs. the good's base
+}
+
 export interface MoneyDTO {
   monthLabel: string;
   cashInHand: number;
@@ -65,6 +75,9 @@ export interface MoneyDTO {
   debts: DebtLine[];
   netWorth: number; // EC$ — cash + Σ asset value − Σ remaining principal (derived)
   notes: string[]; // contextual prose, e.g. a short-this-month warning.
+  // Local market prices the player's SPOT ventures read (P10.5). Empty when the
+  // player has no market-driven income. Optional for back-compatibility.
+  marketWatch?: MarketWatchLine[];
 }
 
 // GET /saves/:id/feed?month= — the Daily Life feed for a month.
