@@ -88,7 +88,9 @@ export function simulateOneMonth(world: WorldState): WorldState {
       if (newCash < 0) {
         agent.loanArrearsMonths = (agent.loanArrearsMonths ?? 0) + 1;
         if (agent.loanArrearsMonths >= PLAYER_ARREARS_LIMIT) {
-          triggerPersonalLoanDefault(agent);
+          // Default only enough loans to close the monthly gap (-newCash), not the
+          // whole book — an affordable loan should survive a smaller one going bad.
+          triggerPersonalLoanDefault(agent, -newCash);
           agent.loanArrearsMonths = 0;
         }
       } else {

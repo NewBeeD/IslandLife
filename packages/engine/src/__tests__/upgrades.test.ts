@@ -9,7 +9,7 @@ import {
   surfaceOpportunities,
   updatePlayerIncome,
 } from '../index';
-import type { WorldState } from '@island/shared';
+import type { Loan, WorldState } from '@island/shared';
 
 // A self-employed fisher with enough experience to be offered the bigger boat.
 function fisherReadyToGrow(seed = 21): WorldState {
@@ -173,5 +173,42 @@ describe('the player rides arrears before defaulting (a seasonal trade is surviv
     simulateOneMonth(world);
     expect(world.player.loanArrearsMonths).toBe(1);
     expect(world.player.loans.every((l) => l.status === 'ACTIVE')).toBe(true);
+  });
+
+  it('defaults only the loans needed to close the gap, sparing an affordable one', () => {
+    const world = buildWorld(21, { population: 60 });
+    const p = world.player;
+    p.employmentStatus = 'SELF_EMPLOYED';
+    p.employer = null;
+    p.incomeMode = undefined;
+    p.monthlyIncome = 1200;
+    p.monthlyLivingCosts = 300;
+    p.cash = 0;
+
+    // A big bank loan the player can comfortably service (1200 income - 750 spending
+    // - 400 payment = +50), plus a small friend loan that tips the month negative.
+    const bankLoan: Loan = {
+      id: 'LOAN_BANK', bankId: 'NCB', borrowerPersonId: p.id, principal: 20000,
+      remainingPrincipal: 20000, interestRate: 0.1, monthlyPayment: 400, termMonths: 60,
+      originMonth: 0, status: 'ACTIVE',
+    };
+    const friendLoan: Loan = {
+      id: 'LOAN_FRIEND', bankId: 'FRIEND:NPC_1', borrowerPersonId: p.id, principal: 3000,
+      remainingPrincipal: 3000, interestRate: 0.06, monthlyPayment: 200, termMonths: 18,
+      originMonth: 0, status: 'ACTIVE',
+    };
+    p.loans = [bankLoan, friendLoan];
+
+    // Three lean months: arrears builds, then default fires on the third.
+    simulateOneMonth(world);
+    simulateOneMonth(world);
+    simulateOneMonth(world);
+
+    // The affordable bank loan survives; only the friend loan (the smaller payment,
+    // enough to cover the 150 gap on its own) goes into default — not the whole book.
+    expect(world.player.loans.find((l) => l.id === 'LOAN_BANK')?.status).toBe('ACTIVE');
+    expect(world.player.loans.some((l) => l.id === 'LOAN_FRIEND' && l.status === 'ACTIVE')).toBe(
+      false,
+    );
   });
 });
