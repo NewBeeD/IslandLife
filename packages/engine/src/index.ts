@@ -27,6 +27,17 @@ export { governmentAct, computeTaxRevenue } from './government';
 export { computeLegacyIncrement, netWorthOf } from './legacy';
 export { npcDecide, applyAction, triggerPersonalLoanDefault } from './agents';
 export {
+  evaluateOptions,
+  chooseBest,
+  valuateCandidate,
+  lossAversionLambda,
+  gainCurvature,
+  discountRate,
+  weightProbability,
+  discountFactor,
+} from './decision';
+export type { Outcome, ActionCandidate, ScoredCandidate } from './decision';
+export {
   surfaceOpportunities,
   resolveDecision,
   quoteUpgradeFinancing,

@@ -1,5 +1,6 @@
 import { INDUSTRIES } from '@island/shared';
 import type { Industry, NPCAgent, WorldState } from '@island/shared';
+import { chooseBest, type ActionCandidate } from './decision';
 
 export type Action = { type: 'SEEK_EMPLOYMENT' } | { type: 'SAVE' };
 
@@ -8,11 +9,41 @@ const EARNING_INDUSTRIES: Industry[] = INDUSTRIES.filter(
   (i) => i !== 'INFORMAL_TRADE' && i !== 'FINANCE',
 );
 
-// Simplified decision engine for the slice: the unemployed look for work, others
-// hold. The full prospect-theory engine (Kahneman & Tversky) lands in a later phase.
-export function npcDecide(agent: NPCAgent, _world: WorldState): Action {
-  if (agent.employmentStatus === 'UNEMPLOYED') return { type: 'SEEK_EMPLOYMENT' };
-  return { type: 'SAVE' };
+// The midpoint of the informal earning band (700–1500) that `applyAction` pays a
+// newly self-employed agent — the expected gain a job hunt holds out.
+const EXPECTED_SELF_EMPLOYED_INCOME = 1100;
+
+// Build the actions an agent could take this month, each framed as an outcome
+// distribution against the reference of holding still (SAVE). For P19.1 the live
+// engine still only *acts* on SEEK_EMPLOYMENT — richer candidates (START_BUSINESS,
+// EXPAND, BORROW, EXIT) slot into this list in later prompts (P19.5) — so the
+// realized set is the same two it always was, but the *choice* now flows through the
+// prospect-theory engine. SEEK is listed first so it wins the tie when its hiring
+// odds collapse to zero, keeping the chosen action (and the rng draw `applyAction`
+// makes for it) byte-identical to the old stub.
+function candidateActions(agent: NPCAgent, world: WorldState): ActionCandidate<Action>[] {
+  const candidates: ActionCandidate<Action>[] = [];
+  if (agent.employmentStatus === 'UNEMPLOYED') {
+    // The same hiring odds `applyAction` rolls — finding work is a pure gain (income
+    // this month), so for any positive odds it beats holding, exactly as before.
+    const hireChance = 0.25 * (1 - world.government.unemploymentRate);
+    candidates.push({
+      type: 'SEEK_EMPLOYMENT',
+      outcomes: [{ probability: hireChance, payoff: EXPECTED_SELF_EMPLOYED_INCOME, delayMonths: 0 }],
+      meta: { type: 'SEEK_EMPLOYMENT' },
+    });
+  }
+  candidates.push({ type: 'SAVE', outcomes: [], meta: { type: 'SAVE' } });
+  return candidates;
+}
+
+// The living NPC decision: score the available actions with the prospect-theory
+// engine and take the best (Kahneman & Tversky, P19.1). Today the unemployed look
+// for work and everyone else holds — the same outcome as the old stub — but now the
+// judgement is trait-driven (lossAversion/riskTolerance/patience) and ready to weigh
+// the richer actions later prompts add.
+export function npcDecide(agent: NPCAgent, world: WorldState): Action {
+  return chooseBest(agent, candidateActions(agent, world))?.meta ?? { type: 'SAVE' };
 }
 
 export function applyAction(agent: NPCAgent, action: Action, world: WorldState): void {
