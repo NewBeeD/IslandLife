@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildWorld, resolveDecision, surfaceOpportunities } from '../index';
+import { applyUpgradeFinancing, buildWorld, surfaceOpportunities } from '../index';
 import { OFFER_REOFFER_COOLDOWN_MONTHS, opportunityLogicalKey } from '@island/shared';
 import type { WorldState } from '@island/shared';
 
@@ -133,7 +133,7 @@ describe('P13.4 — enrolment status is unambiguous after enrolling', () => {
     expect(opp).toBeDefined();
     const programId = opp.enrolment!.programId;
 
-    resolveDecision(world, opp.decisionId, 'ENROL');
+    applyUpgradeFinancing(world, opp.decisionId, opp.enrolment!.totalCost, 24);
     expect(opp.status).toBe('ACCEPTED');
 
     // Surfacing again (now enrolled) must not push a fresh OPEN/EXPIRED sibling that

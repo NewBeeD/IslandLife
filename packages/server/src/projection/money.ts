@@ -189,9 +189,11 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
   const debts: DebtLine[] = activeLoans.map((l) => {
     const interestPortion = (l.remainingPrincipal * l.interestRate) / 12;
     return {
+      loanId: l.id,
       label: `${loanSourceLabel(world, l.bankId)} loan`,
       remaining: Math.round(l.remainingPrincipal),
       principal: Math.round(l.principal),
+      paidToDate: Math.max(0, Math.round(l.principal - l.remainingPrincipal)),
       monthlyPayment: Math.round(l.monthlyPayment),
       interestRate: l.interestRate,
       interestPortion: Math.round(interestPortion),

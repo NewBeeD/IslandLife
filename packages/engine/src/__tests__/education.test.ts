@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyUpgradeFinancing,
   buildWorld,
   credentialLevelOf,
   deserializeWorld,
   detectEducationCompletions,
   eligiblePrograms,
-  resolveDecision,
   serializeWorld,
   simulateOneMonth,
   surfaceOpportunities,
@@ -55,24 +55,29 @@ describe('P9.1 — education is additive and round-trips', () => {
 });
 
 describe('P9.2 — enrolment surfaces and commits', () => {
-  it('offers a program to an eligible player and enrolling starts it', () => {
+  it('offers a program to an eligible player and enrolling (self-funded) starts it', () => {
     const world = student();
     surfaceOpportunities(world);
     const opp = educationOpp(world);
     expect(opp).toBeDefined();
     expect(opp!.enrolment).toBeDefined();
 
-    resolveDecision(world, opp!.decisionId, 'ENROL');
+    // Financed interactively (P14.5): putting the full cost down (no loan) is the
+    // self-funded path that still drains tuition monthly.
+    applyUpgradeFinancing(world, opp!.decisionId, opp!.enrolment!.totalCost, 24);
     expect(world.player.education?.enrolled?.programId).toBe(opp!.enrolment!.programId);
+    expect(opp!.status).toBe('ACCEPTED');
   });
 
-  it('declining leaves the player un-enrolled', () => {
+  it('surfacing alone does not enrol the player', () => {
     const world = student();
     surfaceOpportunities(world);
     const opp = educationOpp(world)!;
-    resolveDecision(world, opp.decisionId, 'NOT_NOW');
+    // The decision is financed (no fixed option list); the player is not enrolled until
+    // they act on it.
+    const decision = world.decisions.find((d) => d.id === opp.decisionId)!;
+    expect(decision.options).toHaveLength(0);
     expect(world.player.education?.enrolled ?? null).toBeNull();
-    expect(opp.status).toBe('DECLINED');
   });
 
   it('does not offer a level the player already holds', () => {
@@ -89,17 +94,18 @@ describe('P9.3 — tuition drains cash and completion raises knowledge + credent
     const world = student();
     surfaceOpportunities(world);
     const opp = educationOpp(world)!;
-    resolveDecision(world, opp.decisionId, 'ENROL'); // the cheapest rung: a 6-month certificate
+    // Self-funded enrolment (full cost down, no loan): the old monthly-drain path.
+    applyUpgradeFinancing(world, opp.decisionId, opp.enrolment!.totalCost, 24);
     const enrolled = world.player.education!.enrolled!;
     const duration = enrolled.monthsRemaining;
     const totalTuition = duration * enrolled.monthlyCost;
     const litBefore = world.player.knowledge.generalLiteracy;
 
-    // An identical life that declined — same world.rng consumption (the surfacing
-    // draw), so its only difference from the enrolled life is the tuition.
+    // An identical life that did not enrol — same world.rng consumption (the surfacing
+    // draw), so its only difference from the enrolled life is the tuition. A self-funded
+    // enrolment books no loan and moves no cash up front, so both start equal.
     const baseline = student();
     surfaceOpportunities(baseline);
-    resolveDecision(baseline, educationOpp(baseline)!.decisionId, 'NOT_NOW');
     expect(baseline.player.cash).toBe(world.player.cash); // same start
 
     for (let i = 0; i < duration; i++) {
@@ -115,6 +121,45 @@ describe('P9.3 — tuition drains cash and completion raises knowledge + credent
     expect(credentialLevelOf(world.player)).toBe(enrolled.targetLevel);
     expect(world.player.education!.enrolled).toBeNull();
     expect(world.player.knowledge.generalLiteracy).toBeGreaterThan(litBefore);
+  });
+});
+
+describe('P14.5 — enrolment is financeable with a study loan', () => {
+  it('borrowing toward tuition books a loan, pays out the proceeds, and keeps the drain', () => {
+    const world = student();
+    surfaceOpportunities(world);
+    const opp = educationOpp(world)!;
+    const total = opp.enrolment!.totalCost;
+    const loansBefore = world.player.loans.length;
+    const cashBefore = world.player.cash;
+
+    // Put part down and borrow the rest (down = total − 1500 → requested loan ≈ 1500).
+    const res = applyUpgradeFinancing(world, opp.decisionId, total - 1500, 24);
+    expect(res.principal).toBeGreaterThan(0);
+
+    // A study loan was booked and its proceeds landed in cash (Model B — a liquidity
+    // bridge, not a prepayment), so cash rose by the principal rather than falling.
+    expect(world.player.loans.length).toBe(loansBefore + 1);
+    const loan = world.player.loans[world.player.loans.length - 1]!;
+    expect(loan.principal).toBe(res.principal);
+    expect(world.player.cash).toBe(cashBefore + res.principal);
+
+    // The program committed and tuition still drains monthly (Phase 9 preserved).
+    const enrolled = world.player.education!.enrolled!;
+    expect(enrolled.programId).toBe(opp.enrolment!.programId);
+    expect(enrolled.monthlyCost).toBeGreaterThan(0);
+  });
+
+  it('self-funding the whole cost books no loan and moves no cash up front', () => {
+    const world = student();
+    surfaceOpportunities(world);
+    const opp = educationOpp(world)!;
+    const cashBefore = world.player.cash;
+    const res = applyUpgradeFinancing(world, opp.decisionId, opp.enrolment!.totalCost, 24);
+    expect(res.principal).toBe(0);
+    expect(world.player.loans).toHaveLength(0);
+    expect(world.player.cash).toBe(cashBefore); // tuition drains later, monthly
+    expect(world.player.education!.enrolled!.monthlyCost).toBeGreaterThan(0);
   });
 });
 

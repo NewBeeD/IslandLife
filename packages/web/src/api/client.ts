@@ -9,6 +9,7 @@ import type {
   DecisionResultDTO,
   FeedDTO,
   FinancingQuoteDTO,
+  LoanActionResultDTO,
   MoneyDTO,
   OpportunitiesDTO,
   SaleMode,
@@ -99,6 +100,14 @@ export const api = {
     return post<BorrowResultDTO>(`/saves/${saveId}/assets/${assetId}/borrow`, {
       principal,
       termMonths,
+    });
+  },
+  repayLoan(saveId: string, loanId: string, amount: number) {
+    return post<LoanActionResultDTO>(`/saves/${saveId}/loans/${loanId}/repay`, { amount });
+  },
+  setLoanInstallment(saveId: string, loanId: string, monthlyPayment: number) {
+    return post<LoanActionResultDTO>(`/saves/${saveId}/loans/${loanId}/installment`, {
+      monthlyPayment,
     });
   },
   advance(saveId: string) {

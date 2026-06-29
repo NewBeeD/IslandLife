@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  amortize,
   applyPartnership,
   buildWorld,
   deserializeWorld,
@@ -144,6 +145,25 @@ describe('P11.3 — accepting funding adds the backer’s money', () => {
     expect(friendLoan).toBeDefined();
     expect(friendLoan.principal).toBe(offer.amount);
     expect(opp.status).toBe('ACCEPTED');
+  });
+
+  it('P14.4 — a friend-loan offer previews its installment and total before acceptance', () => {
+    const { world } = crowdfundWorld();
+    const opp = world.opportunities.find((o) => o.kind === 'CROWDFUND')!;
+    const dec = world.decisions.find((d) => d.id === opp.decisionId)!;
+    const loanOpt = dec.options.find((o) => o.effect.funding?.fundingKind === 'LOAN')!;
+    const offer = loanOpt.effect.funding!;
+    const monthly = Math.round(amortize(offer.amount, offer.interestRate ?? 0, offer.termMonths ?? 24));
+
+    // The description names the monthly installment and the total it comes to (idea 9),
+    // computed from the same amortization that books the loan, so the figures match.
+    expect(loanOpt.description).toContain(monthly.toLocaleString('en-US'));
+    expect(loanOpt.description).toContain((monthly * (offer.termMonths ?? 24)).toLocaleString('en-US'));
+
+    // And those figures are exactly what gets booked on acceptance.
+    resolveDecision(world, dec.id, loanOpt.id);
+    const friendLoan = world.player.loans.find((l) => isFriendLoanBank(l.bankId))!;
+    expect(friendLoan.monthlyPayment).toBe(monthly);
   });
 
   it('taking equity records a holder and reduces the player’s future share', () => {

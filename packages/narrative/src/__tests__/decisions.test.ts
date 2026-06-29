@@ -130,7 +130,8 @@ describe('Phase 9 — education reads in voice and leaks no mechanics', () => {
   it('acknowledges enrolling without judging it', () => {
     const world = studentWithOffer();
     const decision = world.decisions.find((d) => d.kind === 'EDUCATION_ENROLMENT')!;
-    resolveDecision(world, decision.id, 'ENROL');
+    const opp = world.opportunities.find((o) => o.id === decision.opportunityId)!;
+    applyUpgradeFinancing(world, decision.id, opp.enrolment!.totalCost, 24);
     const ack = buildDecisionAcknowledgement(world, decision);
     expect(ack.toLowerCase()).toContain('you');
     expect(ack).not.toMatch(/right|wrong|good choice|bad choice/i);
@@ -139,7 +140,8 @@ describe('Phase 9 — education reads in voice and leaks no mechanics', () => {
   it('lands a valid completion MEMORY that never names it a decision', () => {
     const world = studentWithOffer();
     const decision = world.decisions.find((d) => d.kind === 'EDUCATION_ENROLMENT')!;
-    resolveDecision(world, decision.id, 'ENROL');
+    const opp = world.opportunities.find((o) => o.id === decision.opportunityId)!;
+    applyUpgradeFinancing(world, decision.id, opp.enrolment!.totalCost, 24);
     const program = world.player.education!.enrolled!;
     const entry = generateEducationCompletionEntry(world, program);
     expect(entry.type).toBe('MEMORY');

@@ -62,9 +62,11 @@ export interface AssetLine {
 }
 
 export interface DebtLine {
+  loanId: string; // the loan this line is for (so the player can repay/resize it)
   label: string;
   remaining: number; // EC$ remaining principal
   principal: number; // EC$ original principal borrowed
+  paidToDate: number; // EC$ of principal repaid so far (= principal − remaining)
   monthlyPayment: number; // EC$/month (the agreed payment)
   interestRate: number; // annual rate, e.g. 0.0925 (Phase 7: the player's own loan, shown)
   interestPortion: number; // EC$ of the next payment that is interest
@@ -273,4 +275,17 @@ export interface BorrowResultDTO {
   termMonths: number;
   cashInHand: number; // EC$ after the loan is paid out
   acknowledgement: string;
+}
+
+// POST /saves/:id/loans/:loanId/{repay,installment} — the player acting on their own
+// loan (Phase 14): a lump-sum early payoff or a resized installment. These are the
+// player's own books, so the loan's figures are shown in full.
+export interface LoanActionResultDTO {
+  loanId: string;
+  status: 'ACTIVE' | 'PAID'; // PAID once a repayment clears the balance
+  remaining: number; // EC$ remaining principal after the action
+  monthlyPayment: number; // EC$/month (0 once PAID)
+  monthsLeft: number; // re-derived from the new balance/installment
+  cashInHand: number; // EC$ after the action
+  acknowledgement: string; // a short in-voice line
 }

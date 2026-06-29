@@ -9,6 +9,7 @@ import {
 import type {
   CredentialLevel,
   DecisionOption,
+  EducationProgram,
   Industry,
   NewVentureSpec,
   Opportunity,
@@ -26,7 +27,13 @@ import {
   hasVentures,
   ventureAssetType,
 } from './ventures';
-import { credentialLevelOf, enrolPlayer, surfaceEducation } from './education';
+import {
+  STUDY_LOAN_MAX_TERM_MONTHS,
+  STUDY_LOAN_MIN_TERM_MONTHS,
+  credentialLevelOf,
+  enrolPlayer,
+  surfaceEducation,
+} from './education';
 import {
   applyBackerFunding,
   applyPartnership,
@@ -541,20 +548,6 @@ export function resolveDecision(
   decision.resolvedMonth = world.month;
   decision.consequenceMonth = world.month + CONSEQUENCE_LAG_MONTHS;
 
-  // Education enrolment (Phase 9): accepting commits the program; declining is a
-  // no-op. Completion (and its narrative) is driven by detectEducationCompletions,
-  // not the generic consequence path, so clear the consequence month.
-  if (decision.kind === 'EDUCATION_ENROLMENT') {
-    decision.consequenceMonth = null;
-    if (option.effect.enrol && opportunity?.enrolment) {
-      enrolPlayer(world, opportunity.enrolment);
-      if (opportunity) opportunity.status = 'ACCEPTED';
-    } else if (opportunity) {
-      opportunity.status = 'DECLINED';
-    }
-    return decision;
-  }
-
   // Crowdfunding (Phase 11): a chosen backer's money comes in as a friend-loan or an
   // equity stake; "raise nothing" is a no-op. The delayed MEMORY uses the consequence
   // path scheduled above.
@@ -608,6 +601,9 @@ export function resolveDecision(
 interface Financeable {
   label: string; // the thing being bought/started
   price: number; // EC$ up front
+  // The collateral the bank prices the loan against: the asset for an upgrade/new
+  // venture (secured), 0 for a study loan (unsecured — Phase 14, P14.5).
+  collateralValue: number;
   minTermMonths: number;
   maxTermMonths: number;
 }
@@ -616,23 +612,34 @@ interface Financeable {
 function financeableOf(opp: Opportunity): Financeable | null {
   if (opp.upgrade) {
     const u = opp.upgrade;
-    return { label: u.assetLabel, price: u.assetPrice, minTermMonths: u.minTermMonths, maxTermMonths: u.maxTermMonths };
+    return { label: u.assetLabel, price: u.assetPrice, collateralValue: u.assetPrice, minTermMonths: u.minTermMonths, maxTermMonths: u.maxTermMonths };
   }
   if (opp.newVenture) {
     const n = opp.newVenture;
-    return { label: n.label, price: n.entryCost, minTermMonths: n.minTermMonths, maxTermMonths: n.maxTermMonths };
+    return { label: n.label, price: n.entryCost, collateralValue: n.entryCost, minTermMonths: n.minTermMonths, maxTermMonths: n.maxTermMonths };
+  }
+  if (opp.enrolment) {
+    // A study loan is unsecured — no collateral (P14.5). The "price" is the tuition the
+    // player can fund themselves and/or borrow toward.
+    const e = opp.enrolment;
+    return { label: e.name, price: e.totalCost, collateralValue: 0, minTermMonths: STUDY_LOAN_MIN_TERM_MONTHS, maxTermMonths: STUDY_LOAN_MAX_TERM_MONTHS };
   }
   return null;
 }
 
-// Locate an open financed decision (ASSET_UPGRADE or NEW_VENTURE) and its purchase,
-// or throw the right DecisionError (mirrors the validation in resolveDecision).
+// Locate an open financed decision (ASSET_UPGRADE, NEW_VENTURE, or EDUCATION_ENROLMENT)
+// and its purchase, or throw the right DecisionError (mirrors resolveDecision).
 function findFinanceable(
   world: WorldState,
   decisionId: string,
 ): { decision: PlayerDecision; opportunity: Opportunity; spec: Financeable } {
   const decision = world.decisions.find((d) => d.id === decisionId);
-  if (!decision || (decision.kind !== 'ASSET_UPGRADE' && decision.kind !== 'NEW_VENTURE')) {
+  if (
+    !decision ||
+    (decision.kind !== 'ASSET_UPGRADE' &&
+      decision.kind !== 'NEW_VENTURE' &&
+      decision.kind !== 'EDUCATION_ENROLMENT')
+  ) {
     throw new DecisionError(`financed decision ${decisionId} not found`, 'NOT_FOUND');
   }
   if (decision.chosenOptionId !== null) {
@@ -675,7 +682,7 @@ export function quoteUpgradeFinancing(
   const { spec } = findFinanceable(world, decisionId);
   const cappedDown = clampDown(world, spec.price, downPayment);
   const requestedLoan = Math.max(0, spec.price - cappedDown);
-  const assessment = assessLoanApplication(world, world.player, requestedLoan, termMonths, spec.price);
+  const assessment = assessLoanApplication(world, world.player, requestedLoan, termMonths, spec.collateralValue);
   return {
     ...assessment,
     assetLabel: spec.label,
@@ -710,12 +717,33 @@ export function applyUpgradeFinancing(
   const p = world.player;
   const cappedDown = clampDown(world, spec.price, downPayment);
   const requestedLoan = Math.max(0, spec.price - cappedDown);
-  const a = assessLoanApplication(world, p, requestedLoan, termMonths, spec.price);
+  const a = assessLoanApplication(world, p, requestedLoan, termMonths, spec.collateralValue);
   if (a.outcome === 'DECLINED') throw new DecisionError(a.reason, 'BAD_OPTION');
+  const principal = a.approvedPrincipal;
+
+  // Education (P14.5): a study loan is a liquidity bridge, not a prepayment — tuition
+  // still drains monthly (Phase 9). The loan proceeds land in cash now to offset that
+  // drain, and the unborrowed share is simply funded from the drain, so there is no
+  // upfront down payment to find. Completion (not the generic consequence path) drives
+  // the narrative, so the consequence month is cleared.
+  if (opportunity.kind === 'EDUCATION_ENROLMENT' && opportunity.enrolment) {
+    applyEnrolmentFinancing(world, opportunity.enrolment, a, principal);
+    decision.chosenOptionId = 'ACCEPT_ENROL';
+    decision.resolvedMonth = world.month;
+    decision.consequenceMonth = null;
+    opportunity.status = 'ACCEPTED';
+    return {
+      decision,
+      assetLabel: spec.label,
+      downPayment: Math.max(0, spec.price - principal),
+      principal,
+      interestRate: a.interestRate,
+      monthlyPayment: a.monthlyPayment,
+    };
+  }
 
   // Honour the bank's amount: APPROVED lends the request; COUNTER lends less, so the
   // player must cover the larger remaining cost in cash.
-  const principal = a.approvedPrincipal;
   const effectiveDown = spec.price - principal;
   if (p.cash < effectiveDown) {
     throw new DecisionError('You do not have the cash for that down payment.', 'BAD_OPTION');
@@ -848,6 +876,24 @@ function applyNewVenture(
   (p.ventures ??= []).push(venture);
   // Reflect the new stream in monthly income immediately (recomputed each advance).
   p.monthlyIncome = aggregateVentureIncome(world);
+}
+
+// Enrol on a study loan (Phase 10/14, P14.5): the loan proceeds land in cash to
+// cushion the monthly tuition (which still drains, Phase 9), the loan is booked as the
+// player's own debt, and the program commits. With no loan (the player funds it all
+// themselves) this is exactly the old monthly-drain enrolment.
+function applyEnrolmentFinancing(
+  world: WorldState,
+  program: EducationProgram,
+  a: LoanAssessment,
+  principal: number,
+): void {
+  const p = world.player;
+  if (principal > 0) {
+    p.cash += principal;
+    originateLoan(world, p, a.bankId, principal, a.interestRate, a.monthlyPayment, a.termMonths);
+  }
+  enrolPlayer(world, program);
 }
 
 // Apply the player's chosen income behaviour for the month. Called by the server

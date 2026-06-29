@@ -50,6 +50,128 @@ function principalFromPayment(payment: number, annualRate: number, termMonths: n
   return (payment * (1 - Math.pow(1 + r, -termMonths))) / r;
 }
 
+// ── Loan amortization in the monthly loop (Phase 14) ─────────────────────────
+//
+// Until Phase 14 the monthly loop subtracted a loan's `monthlyPayment` from cash but
+// never paid the principal down, so a balance never fell and a fully-repaid loan
+// lingered forever still charging. These two helpers fix that: `loanPaymentDue` is the
+// read-only cash a loan needs this month (so the caller can total payments before
+// deciding whether the borrower can cover them), and `amortizeLoanMonth` actually
+// applies one month — splitting the level payment into interest and principal, paying
+// the principal down, and closing the loan (PAID, payment zeroed) on its final payment.
+
+// The monthly rate behind a loan's annual `interestRate`.
+function monthlyRate(loan: Loan): number {
+  return loan.interestRate / 12;
+}
+
+// The cash an ACTIVE loan requires this month, without mutating it. Mirrors what
+// `amortizeLoanMonth` will charge: the level payment, except on the final payment,
+// which is only the remaining balance plus its interest (so it is ≤ monthlyPayment).
+// 0 for any non-ACTIVE loan.
+export function loanPaymentDue(loan: Loan): number {
+  if (loan.status !== 'ACTIVE') return 0;
+  const interest = loan.remainingPrincipal * monthlyRate(loan);
+  return Math.min(loan.monthlyPayment, loan.remainingPrincipal + interest);
+}
+
+// Apply one month of amortization to an ACTIVE loan: pay the principal down by the
+// payment's principal portion and, on the final payment, zero the balance and flip the
+// loan to PAID (clearing its payment so it stops charging). Returns the cash actually
+// paid this month (≤ monthlyPayment). A no-op returning 0 for any non-ACTIVE loan.
+export function amortizeLoanMonth(loan: Loan): number {
+  if (loan.status !== 'ACTIVE') return 0;
+  const interest = loan.remainingPrincipal * monthlyRate(loan);
+  const principalPortion = loan.monthlyPayment - interest;
+  if (principalPortion >= loan.remainingPrincipal) {
+    // Final payment: only the remaining balance and its interest are still owed.
+    const payment = loan.remainingPrincipal + interest;
+    loan.remainingPrincipal = 0;
+    loan.status = 'PAID';
+    loan.monthlyPayment = 0;
+    return payment;
+  }
+  loan.remainingPrincipal -= principalPortion;
+  return loan.monthlyPayment;
+}
+
+// ── Player loan management: pay off early & resize installments (Phase 14) ───
+
+export class LoanError extends Error {
+  constructor(
+    message: string,
+    readonly code: 'NOT_FOUND' | 'INACTIVE' | 'BAD_AMOUNT' | 'INSUFFICIENT_CASH' | 'BELOW_FLOOR',
+  ) {
+    super(message);
+    this.name = 'LoanError';
+  }
+}
+
+// The number of level payments of `payment` it takes to retire `principal` at
+// `annualRate`. Returns Infinity when the payment does not even cover the interest
+// (so the balance would never fall) — callers reject that case.
+function periodsToAmortize(principal: number, payment: number, annualRate: number): number {
+  if (principal <= 0) return 0;
+  if (payment <= 0) return Infinity;
+  const r = annualRate / 12;
+  if (r <= 0) return Math.ceil(principal / payment);
+  const ratio = 1 - (r * principal) / payment;
+  if (ratio <= 0) return Infinity; // payment ≤ interest — never amortizes
+  return Math.ceil(-Math.log(ratio) / Math.log(1 + r));
+}
+
+function findPlayerLoan(world: WorldState, loanId: string): Loan {
+  const loan = world.player.loans.find((l) => l.id === loanId);
+  if (!loan) throw new LoanError(`loan ${loanId} not found`, 'NOT_FOUND');
+  return loan;
+}
+
+// Pay a lump sum off a loan ahead of schedule (P14.2): the amount comes out of cash
+// and off the remaining principal, closing the loan to PAID if it clears the balance.
+// A partial payment keeps the installment and shortens the term. Throws on a missing/
+// inactive loan, a non-positive amount, or insufficient cash. Returns the loan.
+export function repayLoan(world: WorldState, loanId: string, amount: number): Loan {
+  const p = world.player;
+  const loan = findPlayerLoan(world, loanId);
+  if (loan.status !== 'ACTIVE') throw new LoanError('That loan is no longer active.', 'INACTIVE');
+  const requested = Math.floor(amount);
+  if (requested <= 0) throw new LoanError('Enter an amount to pay.', 'BAD_AMOUNT');
+  if (requested > Math.floor(p.cash)) throw new LoanError('You do not have that much cash.', 'INSUFFICIENT_CASH');
+
+  const applied = Math.min(requested, loan.remainingPrincipal);
+  p.cash -= applied;
+  loan.remainingPrincipal -= applied;
+  if (loan.remainingPrincipal <= 0) {
+    loan.remainingPrincipal = 0;
+    loan.status = 'PAID';
+    loan.monthlyPayment = 0;
+    return loan;
+  }
+  // Keep the agreed installment; the lump sum simply brings the payoff date forward.
+  const elapsed = world.month - loan.originMonth;
+  const n = periodsToAmortize(loan.remainingPrincipal, loan.monthlyPayment, loan.interestRate);
+  if (Number.isFinite(n)) loan.termMonths = elapsed + n;
+  return loan;
+}
+
+// Resize a loan's monthly installment (P14.2): raising it shortens the term, lowering
+// it lengthens it. The new payment must clear at least the current month's interest
+// (else the balance would never fall). Re-derives `termMonths`. Returns the loan.
+export function setLoanInstallment(world: WorldState, loanId: string, newMonthlyPayment: number): Loan {
+  const loan = findPlayerLoan(world, loanId);
+  if (loan.status !== 'ACTIVE') throw new LoanError('That loan is no longer active.', 'INACTIVE');
+  const payment = Math.round(newMonthlyPayment);
+  const interestFloor = Math.ceil((loan.remainingPrincipal * loan.interestRate) / 12);
+  if (payment <= interestFloor) {
+    throw new LoanError('The payment has to at least cover the interest each month.', 'BELOW_FLOOR');
+  }
+  loan.monthlyPayment = payment;
+  const elapsed = world.month - loan.originMonth;
+  const n = periodsToAmortize(loan.remainingPrincipal, payment, loan.interestRate);
+  loan.termMonths = elapsed + (Number.isFinite(n) ? n : 1);
+  return loan;
+}
+
 export interface LoanAssessment {
   outcome: 'APPROVED' | 'COUNTER' | 'DECLINED';
   bankId: string;

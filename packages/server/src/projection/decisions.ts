@@ -1,5 +1,9 @@
 import { buildDecisionSituation } from '@island/narrative';
-import type { UpgradeQuote } from '@island/engine';
+import {
+  STUDY_LOAN_MAX_TERM_MONTHS,
+  STUDY_LOAN_MIN_TERM_MONTHS,
+  type UpgradeQuote,
+} from '@island/engine';
 import type {
   DecisionDTO,
   FinancingControlDTO,
@@ -48,6 +52,11 @@ function financeableSpec(
     const n = opp.newVenture;
     return { label: n.label, price: n.entryCost, minTermMonths: n.minTermMonths, maxTermMonths: n.maxTermMonths };
   }
+  if (opp.enrolment) {
+    // A study loan toward tuition (P14.5): the "price" is the full course cost.
+    const e = opp.enrolment;
+    return { label: e.name, price: e.totalCost, minTermMonths: STUDY_LOAN_MIN_TERM_MONTHS, maxTermMonths: STUDY_LOAN_MAX_TERM_MONTHS };
+  }
   return undefined;
 }
 
@@ -84,9 +93,13 @@ export function toDecisionDTO(world: WorldState, decisionId: string): DecisionDT
   const status: DecisionDTO['status'] =
     decision.chosenOptionId !== null ? 'RESOLVED' : expired ? 'EXPIRED' : 'OPEN';
 
-  // Asset upgrades and new ventures are financed interactively (the slider); the
-  // Eunice contract and education enrolment are a fixed option list.
-  const isFinancing = decision.kind === 'ASSET_UPGRADE' || decision.kind === 'NEW_VENTURE';
+  // Asset upgrades, new ventures, and education enrolment are financed interactively
+  // (the slider — pay it yourself and/or borrow); only the Eunice contract is a fixed
+  // option list now.
+  const isFinancing =
+    decision.kind === 'ASSET_UPGRADE' ||
+    decision.kind === 'NEW_VENTURE' ||
+    decision.kind === 'EDUCATION_ENROLMENT';
   const monthsLeft = opp ? opp.surfacedMonth + opp.windowMonths - world.month : 0;
   const window = expired
     ? 'The moment has passed.'

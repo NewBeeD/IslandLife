@@ -1,7 +1,7 @@
 import { INDUSTRY_DOMAIN } from '@island/shared';
 import type { WorldState } from '@island/shared';
 import { applyAction, npcDecide, triggerPersonalLoanDefault } from './agents';
-import { checkBankSolvency } from './banking';
+import { amortizeLoanMonth, checkBankSolvency, loanPaymentDue } from './banking';
 import { applyClosureCascade, checkCompanySolvency, computeCompanyRevenue } from './company';
 import { rollRandomEvents } from './events';
 import { governmentAct } from './government';
@@ -39,9 +39,7 @@ export function simulateOneMonth(world: WorldState): WorldState {
   // PHASE 4: costs, solvency, closure cascade
   for (const company of world.companies) {
     if (company.status === 'CLOSED') continue;
-    const loanPayments = company.loans
-      .filter((l) => l.status === 'ACTIVE')
-      .reduce((s, l) => s + l.monthlyPayment, 0);
+    const loanPayments = company.loans.reduce((s, l) => s + loanPaymentDue(l), 0);
     const eventLoad = world.events.filter((e) => e.affectedIndustries.includes(company.industry)).length;
     // baseOperatingCosts is the full monthly cost line (seed costs / 12) and already
     // includes payroll, so the wage bill is NOT subtracted again here. (Phase 1
@@ -56,6 +54,11 @@ export function simulateOneMonth(world: WorldState): WorldState {
     if (status === 'CLOSED') applyClosureCascade(company, world);
     company.status = status;
     company.isSolvent = status !== 'CLOSED';
+
+    // Phase 14: pay down whatever loans are still ACTIVE this month so a firm's debt
+    // actually falls and a repaid loan closes. A closed company's loans were just
+    // marked DEFAULT by the cascade, so amortizeLoanMonth skips them.
+    for (const loan of company.loans) amortizeLoanMonth(loan);
   }
 
   // PHASE 4c (Phase 12, additive): settle any PATIENT asset sales that have come
@@ -70,9 +73,10 @@ export function simulateOneMonth(world: WorldState): WorldState {
         ? agent.monthlyIncome
         : 0
       : agent.monthlyIncome;
-    const personalLoanPayments = agent.loans
-      .filter((l) => l.status === 'ACTIVE')
-      .reduce((s, l) => s + l.monthlyPayment, 0);
+    // Phase 14: the cash actually due on each ACTIVE loan this month (the final
+    // payment is only the remaining balance). The principal is paid down below, once
+    // it is clear the agent serviced the loan rather than defaulting.
+    const personalLoanPayments = agent.loans.reduce((s, l) => s + loanPaymentDue(l), 0);
     // Spending = base living costs + lifestyle creep on surplus income, so cash
     // does not accumulate unboundedly (a crude consumption model for the slice).
     const surplus = Math.max(0, income - agent.monthlyLivingCosts);
@@ -107,6 +111,11 @@ export function simulateOneMonth(world: WorldState): WorldState {
     }
 
     agent.cash = Math.max(newCash, 0);
+
+    // Phase 14: pay down the loans the agent actually serviced this month — principal
+    // falls and a fully-repaid loan flips to PAID (and stops charging). Loans pushed
+    // into DEFAULT just above are no longer ACTIVE, so amortizeLoanMonth skips them.
+    for (const loan of agent.loans) amortizeLoanMonth(loan);
   }
 
   // PHASE 5b (Phase 11, additive): friend-funded money flows. A friend-loan that

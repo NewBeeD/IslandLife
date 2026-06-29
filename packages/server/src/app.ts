@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import {
   DecisionError,
+  LoanError,
   SaleError,
   applyUpgradeFinancing,
   borrowAgainstAsset,
@@ -10,8 +11,10 @@ import {
   listAssetForSale,
   quoteCollateralLoan,
   quoteUpgradeFinancing,
+  repayLoan,
   resolveDecision,
   sellAssetNow,
+  setLoanInstallment,
   simulateOneMonth,
   surfaceOpportunities,
   updatePlayerIncome,
@@ -50,6 +53,7 @@ import {
   toDecisionDTO,
   toFeedDTO,
   toFinancingQuoteDTO,
+  toLoanActionResultDTO,
   toMoneyDTO,
   toOpportunitiesDTO,
   toStateDTO,
@@ -350,6 +354,58 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
       return reply.code(400).send({ error: (err as Error).message });
     }
   });
+
+  // POST /saves/:id/loans/:loanId/repay — pay a lump sum off a loan early (Phase 14).
+  // Body { amount }. Reduces the balance (closing the loan if it clears it), then
+  // persists. The amount comes out of cash; the player can only act on their own loans.
+  app.post<{ Params: { id: string; loanId: string }; Body: { amount?: number } }>(
+    '/saves/:id/loans/:loanId/repay',
+    async (req, reply) => {
+      const loaded = await loadOr404(req.params.id, reply);
+      if (!loaded) return;
+      const { world } = loaded;
+      const amount = Number(req.body?.amount ?? 0);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return reply.code(400).send({ error: 'a positive amount is required' });
+      }
+      try {
+        const loan = repayLoan(world, req.params.loanId, amount);
+        await saveTick(req.params.id, world);
+        return toLoanActionResultDTO(world, loan, 'REPAY');
+      } catch (err) {
+        if (err instanceof LoanError) {
+          return reply.code(err.code === 'NOT_FOUND' ? 404 : 400).send({ error: err.message });
+        }
+        throw err;
+      }
+    },
+  );
+
+  // POST /saves/:id/loans/:loanId/installment — resize a loan's monthly payment
+  // (Phase 14). Body { monthlyPayment }. Raising it shortens the term, lowering it
+  // lengthens it; rejected below the interest floor. Re-derives the term, then persists.
+  app.post<{ Params: { id: string; loanId: string }; Body: { monthlyPayment?: number } }>(
+    '/saves/:id/loans/:loanId/installment',
+    async (req, reply) => {
+      const loaded = await loadOr404(req.params.id, reply);
+      if (!loaded) return;
+      const { world } = loaded;
+      const monthlyPayment = Number(req.body?.monthlyPayment ?? 0);
+      if (!Number.isFinite(monthlyPayment) || monthlyPayment <= 0) {
+        return reply.code(400).send({ error: 'a positive monthlyPayment is required' });
+      }
+      try {
+        const loan = setLoanInstallment(world, req.params.loanId, monthlyPayment);
+        await saveTick(req.params.id, world);
+        return toLoanActionResultDTO(world, loan, 'INSTALLMENT');
+      } catch (err) {
+        if (err instanceof LoanError) {
+          return reply.code(err.code === 'NOT_FOUND' ? 404 : 400).send({ error: err.message });
+        }
+        throw err;
+      }
+    },
+  );
 
   // POST /saves/:id/advance — advance one month. Runs simulateOneMonth, fires the
   // Layer-1 template narrative synchronously, persists both, and returns the

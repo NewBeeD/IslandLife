@@ -163,12 +163,18 @@ function backerOptionText(offer: BackerOffer): { label: string; description: str
         `of it, good months and bad. No payments to find, but their share is theirs for good.`,
     };
   }
+  // P14.4 — show the installment and the total it comes to before the player accepts,
+  // computed from the same amortization that books the loan, so the figures match.
+  const rate = offer.interestRate ?? 0;
+  const term = offer.termMonths ?? 24;
+  const monthly = Math.round(amortize(offer.amount, rate, term));
+  const total = monthly * term;
   return {
     label: `Borrow ${formatEc(offer.amount)} from ${offer.backerName}`,
     description:
-      `${offer.backerName} lends you ${formatEc(offer.amount)}, paid back over ` +
-      `${offer.termMonths} months at about ${pct(offer.interestRate ?? 0)} a year — gentler than ` +
-      `the bank, but it is a friend's money, and a friend remembers.`,
+      `${offer.backerName} lends you ${formatEc(offer.amount)}, paid back over ${term} months — ` +
+      `about ${formatEc(monthly)} a month, ${formatEc(total)} in all, at roughly ${pct(rate)} a year. ` +
+      `Gentler than the bank, but it is a friend's money, and a friend remembers.`,
   };
 }
 

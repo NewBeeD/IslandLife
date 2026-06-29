@@ -5,6 +5,7 @@ import type {
   BorrowResultDTO,
   CollateralQuoteDTO,
   Loan,
+  LoanActionResultDTO,
   SaleMode,
   WorldState,
 } from '@island/shared';
@@ -53,6 +54,31 @@ export function toCollateralQuoteDTO(quote: CollateralQuote): CollateralQuoteDTO
     termMonths: quote.termMonths,
     bankLabel: quote.bankId ? bankLabel(quote.bankId) : '',
     reason: quote.reason,
+  };
+}
+
+// The result of repaying early or resizing a loan (Phase 14). `monthsLeft` is
+// re-derived from the loan's updated schedule (the engine recomputed `termMonths`).
+export function toLoanActionResultDTO(
+  world: WorldState,
+  loan: Loan,
+  action: 'REPAY' | 'INSTALLMENT',
+): LoanActionResultDTO {
+  const paid = loan.status === 'PAID';
+  const acknowledgement =
+    action === 'REPAY'
+      ? paid
+        ? 'It is cleared. That debt is behind you now.'
+        : 'You put money against it. The balance is lighter and the end is nearer.'
+      : 'The payment is reset. From next month it lands at the new figure.';
+  return {
+    loanId: loan.id,
+    status: paid ? 'PAID' : 'ACTIVE',
+    remaining: Math.round(loan.remainingPrincipal),
+    monthlyPayment: Math.round(loan.monthlyPayment),
+    monthsLeft: Math.max(0, loan.termMonths - (world.month - loan.originMonth)),
+    cashInHand: Math.round(world.player.cash),
+    acknowledgement,
   };
 }
 

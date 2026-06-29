@@ -10,6 +10,11 @@ export {
   originateLoan,
   quoteCollateralLoan,
   borrowAgainstAsset,
+  repayLoan,
+  setLoanInstallment,
+  amortizeLoanMonth,
+  loanPaymentDue,
+  LoanError,
 } from './banking';
 export type { LoanAssessment, CollateralQuote } from './banking';
 export {
@@ -71,6 +76,8 @@ export {
   chargeTuition,
   detectEducationCompletions,
   monthlyTuition,
+  STUDY_LOAN_MIN_TERM_MONTHS,
+  STUDY_LOAN_MAX_TERM_MONTHS,
 } from './education';
 export {
   resaleQuote,

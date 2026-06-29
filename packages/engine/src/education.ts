@@ -32,6 +32,11 @@ const EDUCATION_COOLDOWN = 3; // months after an offer lapses/declines before an
 // Affordability gate: the player needs a few months' tuition in hand to start.
 const AFFORD_MONTHS = 3;
 
+// Selectable terms for a study loan (Phase 14, P14.5) — the financing slider offers
+// these when the player borrows toward tuition rather than paying it all themselves.
+export const STUDY_LOAN_MIN_TERM_MONTHS = 12;
+export const STUDY_LOAN_MAX_TERM_MONTHS = 48;
+
 // The program catalogue — a GENERAL academic track plus a couple of field tracks.
 // Each step requires the level below it, so a player climbs one rung at a time.
 const PROGRAM_CATALOGUE: EducationProgram[] = [
@@ -115,27 +120,6 @@ export function surfaceEducation(world: WorldState): Opportunity | null {
 
   const oppId = `OPP_${program.programId}_${world.month}`;
   const decId = `DEC_${program.programId}_${world.month}`;
-  const cost = monthlyTuition(program);
-  const options: PlayerDecision['options'] = [
-    {
-      id: 'ENROL',
-      label: `Enrol — take up ${program.name}`,
-      description:
-        `${formatEc(program.totalCost)} over ${program.durationMonths} months — about ` +
-        `${formatEc(cost)} a month while you study. It is money out of pocket every month ` +
-        `with nothing to show until you finish, but a qualification opens doors that stay ` +
-        `shut otherwise.`,
-      effect: { enrol: true },
-    },
-    {
-      id: 'NOT_NOW',
-      label: 'Leave it for now',
-      description:
-        'The money stays in your pocket and your time stays your own. The chance will likely ' +
-        'come round again, but the years do not wait.',
-      effect: { enrol: false },
-    },
-  ];
 
   const decision: PlayerDecision = {
     id: decId,
@@ -143,7 +127,9 @@ export function surfaceEducation(world: WorldState): Opportunity | null {
     kind: 'EDUCATION_ENROLMENT',
     surfacedMonth: world.month,
     windowMonths: EDUCATION_WINDOW,
-    options,
+    // Financed interactively (the slider, P14.5): pay tuition yourself or take a study
+    // loan toward it — not a fixed option list.
+    options: [],
     chosenOptionId: null,
     resolvedMonth: null,
     consequenceMonth: null, // completion narrative is driven by detectEducationCompletions
@@ -222,8 +208,4 @@ export function detectEducationCompletions(world: WorldState): EnrolledProgram[]
     }
   }
   return done;
-}
-
-function formatEc(n: number): string {
-  return `EC$${Math.round(n).toLocaleString('en-US')}`;
 }

@@ -111,7 +111,8 @@ function buildEducationSituation(world: WorldState, decision: PlayerDecision): s
     `nothing to show for it until the end. The evenings would be long and tired ones. But the ` +
     `people who get on around ${place} are often the ones who put the years in when it was ` +
     `hard to.\n\n` +
-    `Do you take it up, or leave it for another season?`
+    `You could carry the cost yourself as you go, or take a study loan toward it and pay that ` +
+    `back over time. Do you take it up, or leave it for another season?`
   );
 }
 
@@ -264,16 +265,14 @@ function buildPartnershipAcknowledgement(world: WorldState, decision: PlayerDeci
 // The acknowledgement after an enrolment choice (Phase 9): the forms signed and the
 // first payment made, or the chance let go by. No outcome — the years do the work.
 function buildEducationAcknowledgement(world: WorldState, decision: PlayerDecision): string {
+  // Enrolment is financed interactively now (P14.5), so this line only renders once the
+  // player has committed — there is no decline branch to acknowledge.
   const opp = findOpportunity(world, decision);
   const name = opp?.enrolment?.name ?? 'the course';
-  const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
-  if (chosen?.effect.enrol) {
-    return (
-      `You sign the forms and pay the first of it. ${capitalise(name)} is yours to see through ` +
-      `now — the evenings will be long, but you have started.`
-    );
-  }
-  return `You let it go by this time. Maybe the next intake. The money stays where it is, and so do you.`;
+  return (
+    `You sign the forms and pay the first of it. ${capitalise(name)} is yours to see through ` +
+    `now — the evenings will be long, but you have started.`
+  );
 }
 
 // The completion MEMORY (Phase 9): months of tuition and tired evenings, now a

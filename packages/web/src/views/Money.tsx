@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AssetLine, CollateralQuoteDTO, MoneyDTO, SaleMode } from '@island/shared';
+import type { AssetLine, CollateralQuoteDTO, DebtLine, MoneyDTO, SaleMode } from '@island/shared';
 import { api } from '../api/client';
 
 // Selectable repayment terms for a loan secured by an asset (1–5 years).
@@ -140,17 +140,14 @@ export function Money({
       {money.debts.length > 0 && (
         <section className="money__section">
           <h3>Debts</h3>
-          {money.debts.map((d, i) => (
-            <div className="money__line money__line--debt" key={i}>
-              <span>{d.label}</span>
-              <span>{ec(d.remaining)} remaining</span>
-              <span className="muted">
-                {ec(d.monthlyPayment)}/month at {pct(d.interestRate)} · {d.monthsLeft} months left
-              </span>
-              <span className="muted">
-                of which {ec(d.interestPortion)} interest, {ec(d.principalPortion)} principal
-              </span>
-            </div>
+          {money.debts.map((d) => (
+            <DebtRow
+              key={d.loanId}
+              saveId={saveId}
+              debt={d}
+              cashInHand={money.cashInHand}
+              onChanged={onChanged}
+            />
           ))}
         </section>
       )}
@@ -201,6 +198,115 @@ export function Money({
           ⚠ {n}
         </p>
       ))}
+    </div>
+  );
+}
+
+// One debt, with the paid-vs-remaining picture and (Phase 14) the controls to pay it
+// off early or resize the monthly installment. Both act on the player's own loan and
+// reload the view on success.
+function DebtRow({
+  saveId,
+  debt,
+  cashInHand,
+  onChanged,
+}: {
+  saveId: string;
+  debt: DebtLine;
+  cashInHand: number;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState(Math.min(debt.remaining, Math.max(0, Math.round(cashInHand))));
+  const [payment, setPayment] = useState(debt.monthlyPayment);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = useCallback(
+    async (fn: () => Promise<unknown>) => {
+      setBusy(true);
+      setError(null);
+      try {
+        await fn();
+        setOpen(false);
+        onChanged();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [onChanged],
+  );
+
+  const maxRepay = Math.min(debt.remaining, Math.max(0, Math.floor(cashInHand)));
+
+  return (
+    <div className="money__line money__line--debt">
+      <span>{debt.label}</span>
+      <span>{ec(debt.remaining)} remaining</span>
+      <span className="muted">
+        {ec(debt.monthlyPayment)}/month at {pct(debt.interestRate)} · {debt.monthsLeft} months left
+      </span>
+      <span className="muted">
+        {ec(debt.paidToDate)} paid of {ec(debt.principal)} · this month {ec(debt.interestPortion)}{' '}
+        interest, {ec(debt.principalPortion)} principal
+      </span>
+      <button type="button" className="link" disabled={busy} onClick={() => setOpen(!open)}>
+        {open ? 'Close' : 'Pay off or resize'}
+      </button>
+
+      {open && (
+        <div className="financing">
+          <label className="financing__field">
+            <span>
+              Pay a lump sum: <strong>{ec(amount)}</strong>
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={Math.max(maxRepay, 0)}
+              step={100}
+              value={Math.min(amount, maxRepay)}
+              onChange={(e) => setAmount(Number(e.target.value))}
+              disabled={busy || maxRepay <= 0}
+            />
+          </label>
+          <div className="financing__actions">
+            <button
+              className="primary"
+              disabled={busy || amount <= 0 || amount > maxRepay}
+              onClick={() => run(() => api.repayLoan(saveId, debt.loanId, amount))}
+            >
+              {amount >= debt.remaining ? 'Clear the loan' : 'Pay this off the balance'}
+            </button>
+          </div>
+
+          <label className="financing__field">
+            <span>
+              Or change the monthly payment to <strong>{ec(payment)}</strong>
+            </span>
+            <input
+              type="number"
+              min={1}
+              step={10}
+              value={payment}
+              onChange={(e) => setPayment(Number(e.target.value))}
+              disabled={busy}
+            />
+          </label>
+          <div className="financing__actions">
+            <button
+              className="primary"
+              disabled={busy || payment <= 0 || payment === debt.monthlyPayment}
+              onClick={() => run(() => api.setLoanInstallment(saveId, debt.loanId, payment))}
+            >
+              Set the installment
+            </button>
+          </div>
+          {error && <p className="error">{error}</p>}
+        </div>
+      )}
     </div>
   );
 }

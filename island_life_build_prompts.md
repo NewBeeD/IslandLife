@@ -23,10 +23,13 @@ of work with an acceptance test, the files it touches, and its dependencies.
   collateral seizure on default), and Phase 13 opportunity lifecycle hygiene — lapsed
   offers deduped by logical identity, surfacing suppressed within a re-offer cooldown,
   a bounded prune of long-settled offers, and a deduped/capped "Passed" list with no
-  phantom expired enrolment. **Next:** the rest of the `ideas.md` playtest backlog —
-  **Phases 14–19** (loan lifecycle bugs first, then the wage model, a job market,
-  venture realism, and negotiable/always-on deals), then the original post-slice
-  backlog (P-B1 firm formation onward).
+  phantom expired enrolment), and Phase 14 loan lifecycle & financing controls (loans
+  amortize and close, pay off early / resize installments, paid-vs-remaining on the money
+  view, friend-loan installment preview, and a financing slider on every investment
+  including a study loan for tuition). **Next:** the rest of the `ideas.md` playtest
+  backlog — **Phases 15–19** (the wage model, a job market, venture realism, and
+  negotiable/always-on deals), then the original post-slice backlog (P-B1 firm formation
+  onward).
 
 ## How to read this
 
@@ -788,7 +791,7 @@ These are the guardrails I follow on every change; they're not steps, they're co
   `opportunityHygiene.test.ts` + 3 in `opportunityProjection.test.ts`; iceberg contract
   still green; determinism digest unchanged.
 
-## Phase 14 — Loan lifecycle & financing controls (bug + feature) 🔴
+## Phase 14 — Loan lifecycle & financing controls (bug + feature) ✅ DONE
 
 > Goal: loans actually **amortize and close**, the player can **see what they've paid
 > and what's left**, and can **pay off early / resize installments** — for bank loans
@@ -846,9 +849,37 @@ These are the guardrails I follow on every change; they're not steps, they're co
   borrow-the-rest option; accepting books a study loan and the tuition drain is offset
   by the loan proceeds.
 
-- *Phase acceptance:* `typecheck` ×2 + `npm test` green (digest change noted); a loan
-  pays down to zero and disappears, the player pays one off early and resizes another,
-  and an enrolment is taken on credit.
+- *Phase acceptance:* ✅ `npm run typecheck && npm run typecheck:web && npm test` green
+  (176 tests; +14 for Phase 14). Loans now **amortize and close**: two helpers in
+  `banking.ts` — `loanPaymentDue` (the read-only cash a loan needs this month) and
+  `amortizeLoanMonth` (splits the level payment into interest + principal, pays the
+  balance down, and flips a fully-repaid loan to `PAID`, zeroing its payment) — are wired
+  into `simulateOneMonth` phase 4 (company loans) and phase 5 (person loans), so a
+  balance falls every month and a paid-off loan stops charging (P14.1). **This is the
+  deliberate digest change called for above** — every world carries company loans, so the
+  no-feature determinism still reproduces and diverges per seed (the unit determinism
+  tests are value-free), but the DB golden master digest moves once; commit it as
+  expected (S2/P-X2). The player can now **pay a loan off early** (`repayLoan` — a lump
+  sum off the balance that closes the loan at zero and brings the payoff date forward) and
+  **resize the installment** (`setLoanInstallment` — raising it shortens the term, lowering
+  it lengthens it, rejected below the interest floor), surfaced at
+  `POST /saves/:id/loans/:loanId/{repay,installment}` returning a `LoanActionResultDTO`,
+  with controls on the Money view (P14.2). Each debt line now shows **paid-to-date vs
+  remaining** (`DebtLine` gains `loanId` + `paidToDate`) and a `PAID` loan drops off the
+  debts list (P14.3). A `CROWDFUND` friend-loan offer **previews its monthly installment
+  and total repayment** in its option prose before acceptance, computed from the same
+  `amortize` that books it so the figures match (P14.4, idea 9). And **education enrolment
+  is now financeable** like any investment: it surfaces as a `FINANCING` slider (pay it
+  yourself and/or take a study loan toward tuition). A study loan is unsecured — its
+  proceeds land in cash as a liquidity bridge while the monthly tuition still drains
+  (Phase 9 preserved), and the loan is repaid like any other; self-funding the whole cost
+  books no loan and moves no cash up front (P14.5, idea 12). New `LoanError`;
+  `repayLoan`/`setLoanInstallment`/`amortizeLoanMonth`/`loanPaymentDue` exported from
+  `@island/engine`; `STUDY_LOAN_{MIN,MAX}_TERM_MONTHS`; `LoanActionResultDTO` +
+  `toLoanActionResultDTO`; a `DebtRow` with repay/resize controls on the Money view;
+  9 tests in `loanLifecycle.test.ts`, 2 each in `education.test.ts` (study loan) /
+  `loanProjection.test.ts` (paid-to-date), 1 in `funding.test.ts` (installment preview);
+  the iceberg contract stays green (the loan figures shown are the player's own books).
 
 ## Phase 15 — The wage model & worker progression (bug + realism) 🟠
 
