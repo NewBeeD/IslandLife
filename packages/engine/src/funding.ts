@@ -178,9 +178,19 @@ function backerOptionText(offer: BackerOffer): { label: string; description: str
   };
 }
 
+// Whether a crowdfunding round is already OPEN for a given funded target (so an
+// on-demand raise does not stack a second live slate on the same venture, P18.4).
+function hasOpenCrowdfund(world: WorldState, targetId: string): boolean {
+  return world.opportunities.some(
+    (o) => o.kind === 'CROWDFUND' && o.status === 'OPEN' && o.crowdfund?.ventureId === targetId,
+  );
+}
+
 // Surface a crowdfunding round if the player has people to ask and something to put
 // the money into (a venture or a self-employed trade). Picks 2–3 backers via
-// world.rng and varies their terms (P11.2). Returns the opportunity, or null.
+// world.rng and varies their terms (P11.2). Returns the opportunity, or null. The
+// passive channel (the world surfacing it on its own) respects a from-month gate and
+// a re-offer cooldown; the on-demand channel (P18.4, initiateCrowdfund) does not.
 export function surfaceCrowdfund(world: WorldState): Opportunity | null {
   const p = world.player;
   if (world.month < CROWDFUND_FROM_MONTH) return null;
@@ -200,6 +210,31 @@ export function surfaceCrowdfund(world: WorldState): Opportunity | null {
   ) {
     return null;
   }
+  return buildCrowdfundRound(world, target);
+}
+
+// Raise money among friends ON DEMAND (Phase 18, P18.4): a standing action the player
+// can take whenever they have a fundable venture and people to ask, rather than waiting
+// for the world to surface a round. Bypasses the from-month gate and the re-offer
+// cooldown, but will not stack a second live slate on a venture already being funded.
+// Returns the new opportunity, or null when there is nothing to fund / no one to ask.
+export function initiateCrowdfund(world: WorldState): Opportunity | null {
+  const p = world.player;
+  if (!(hasVentures(p) || p.employmentStatus === 'SELF_EMPLOYED')) return null;
+  const target = equityTarget(world);
+  if (hasOpenCrowdfund(world, target.id)) return null;
+  return buildCrowdfundRound(world, target);
+}
+
+// Build a crowdfunding round for a funded target: pick 2–3 backers, derive their terms,
+// and push the opportunity + decision. Shared by the passive and on-demand channels
+// (the gating differs; the slate does not). Returns the opportunity, or null if no one
+// can put enough in.
+function buildCrowdfundRound(
+  world: WorldState,
+  target: { id: string; label: string; annualValue: number },
+): Opportunity | null {
+  const p = world.player;
   const candidates = acquaintances(world).filter((a) => a.cash >= 2000);
   if (candidates.length === 0) return null;
 
@@ -217,8 +252,11 @@ export function surfaceCrowdfund(world: WorldState): Opportunity | null {
   }
   if (offers.length === 0) return null;
 
-  const oppId = `OPP_CROWDFUND_${world.month}`;
-  const decId = `DEC_CROWDFUND_${world.month}`;
+  // Include a sequence suffix so an on-demand raise (P18.4) the same month a passive
+  // round lapsed cannot collide with the earlier round's id.
+  const seq = world.opportunities.filter((o) => o.kind === 'CROWDFUND').length;
+  const oppId = `OPP_CROWDFUND_${world.month}_${seq}`;
+  const decId = `DEC_CROWDFUND_${world.month}_${seq}`;
   const options: DecisionOption[] = offers.map((offer, i) => {
     const { label, description } = backerOptionText(offer);
     return { id: `BACKER_${i}`, label, description, effect: { funding: offer } };
@@ -435,9 +473,16 @@ export function surfacePartnership(world: WorldState): Opportunity | null {
 // Form the shared firm: pool both contributions, book any loan against the company
 // (borrowerCompanyId), and add it to the world owned by the player with the partner
 // as an equity holder. Monthly profit is split by share in simulateOneMonth (P11.4).
-export function applyPartnership(world: WorldState, spec: PartnershipSpec): Company {
+// `agreedPartnerShare` (Phase 18, P18.3) overrides the spec's default split when the
+// terms were negotiated; absent → the spec's 50/50-ish default.
+export function applyPartnership(
+  world: WorldState,
+  spec: PartnershipSpec,
+  agreedPartnerShare?: number,
+): Company {
   const p = world.player;
   const partner = world.agents.find((a) => a.id === spec.partnerId);
+  const partnerShare = agreedPartnerShare ?? spec.partnerShare;
   p.cash = Math.max(0, p.cash - spec.playerContribution);
   if (partner) partner.cash = Math.max(0, partner.cash - spec.partnerContribution);
 
@@ -479,10 +524,126 @@ export function applyPartnership(world: WorldState, spec: PartnershipSpec): Comp
     status: 'HEALTHY',
     isSolvent: true,
     estimatedAnnualTax: 0,
-    equityHolders: [{ personId: spec.partnerId, name: spec.partnerName, share: spec.partnerShare }],
+    equityHolders: [{ personId: spec.partnerId, name: spec.partnerName, share: partnerShare }],
   };
   world.companies.push(company);
   return company;
+}
+
+// ── Negotiable partnership terms (Phase 18, P18.3) ───────────────────────────
+// Instead of taking the fixed default split, the player proposes how the profit is
+// shared — taking a bigger slice for themselves, or offering the partner more. The
+// partner accepts, counters, or walks based on their hidden utility (agreeableness,
+// patience), with no score shown: the player proposes and finds out. Contributions
+// stay as the spec sets them; only the profit split is negotiated.
+
+export type NegotiationOutcome = 'ACCEPT' | 'COUNTER' | 'DECLINE';
+
+export interface PartnershipNegotiation {
+  outcome: NegotiationOutcome;
+  // The agreed (ACCEPT) or last-offered (COUNTER) split, as the partner sees it.
+  partnerShare: number; // 0–1 the partner ends with
+  playerShare: number; // 0–1 the player ends with
+  // For COUNTER, the share the partner will come down to — re-propose it to seal it.
+  counterPartnerShare?: number;
+  reason: string;
+  company?: Company; // set only when the deal is struck (ACCEPT) and formed
+}
+
+function findPartnershipDecision(
+  world: WorldState,
+  decisionId: string,
+): { decision: PlayerDecision; opportunity: Opportunity; spec: PartnershipSpec } {
+  const decision = world.decisions.find((d) => d.id === decisionId);
+  if (!decision || decision.kind !== 'PARTNERSHIP') {
+    throw new PartnershipError(`partnership decision ${decisionId} not found`, 'NOT_FOUND');
+  }
+  if (decision.chosenOptionId !== null) {
+    throw new PartnershipError(`decision ${decisionId} already resolved`, 'ALREADY_RESOLVED');
+  }
+  const opportunity = world.opportunities.find((o) => o.id === decision.opportunityId);
+  if (!opportunity || !opportunity.partnership) {
+    throw new PartnershipError(`partnership opportunity for ${decisionId} not found`, 'NOT_FOUND');
+  }
+  if (opportunity.status === 'EXPIRED') {
+    throw new PartnershipError(`decision ${decisionId} has expired`, 'EXPIRED');
+  }
+  return { decision, opportunity, spec: opportunity.partnership };
+}
+
+export class PartnershipError extends Error {
+  constructor(
+    message: string,
+    readonly code: 'NOT_FOUND' | 'ALREADY_RESOLVED' | 'EXPIRED' | 'BAD_PROPOSAL',
+  ) {
+    super(message);
+    this.name = 'PartnershipError';
+  }
+}
+
+// Evaluate (and, on ACCEPT, strike) a proposed profit split for a partnership. The
+// player proposes the PARTNER's share as a percentage (0–100); the rest is theirs.
+// The partner concedes some ground below the contribution-fair split, the amount set
+// by their hidden agreeableness/patience — apply-and-find-out, no score shown.
+export function negotiatePartnership(
+  world: WorldState,
+  decisionId: string,
+  proposedPartnerSharePct: number,
+): PartnershipNegotiation {
+  const { decision, opportunity, spec } = findPartnershipDecision(world, decisionId);
+  const proposed = clamp(proposedPartnerSharePct / 100, 0.05, 0.95);
+
+  // The contribution-fair share for the partner (what their money alone would earn).
+  const fair = clamp(
+    spec.partnerContribution / (spec.playerContribution + spec.partnerContribution),
+    0.05,
+    0.95,
+  );
+  const partner = world.agents.find((a) => a.id === spec.partnerId);
+  // How far below fair the partner will go — a more agreeable, patient partner concedes
+  // more of their own share for the chance to work together.
+  const concession = clamp(
+    0.04 + (partner?.agreeableness ?? 0.5) * 0.14 + (partner?.patience ?? 0.5) * 0.06,
+    0.04,
+    0.26,
+  );
+  const floor = clamp(fair - concession, 0.05, 0.95); // the least the partner will accept
+
+  if (proposed >= floor) {
+    // The player offered the partner enough — strike the deal at the proposed split.
+    const company = applyPartnership(world, spec, proposed);
+    decision.chosenOptionId = 'GO_IN';
+    decision.resolvedMonth = world.month;
+    decision.consequenceMonth = world.month + FUNDING_CONSEQUENCE_LAG_MONTHS;
+    opportunity.status = 'ACCEPTED';
+    return {
+      outcome: 'ACCEPT',
+      partnerShare: Math.round(proposed * 100) / 100,
+      playerShare: Math.round((1 - proposed) * 100) / 100,
+      reason: 'Done. You shake on it.',
+      company,
+    };
+  }
+
+  // Too little for the partner. If it is within reach, they counter at their floor;
+  // otherwise they walk (the decision stays open for another proposal).
+  if (proposed >= floor - 0.2) {
+    return {
+      outcome: 'COUNTER',
+      partnerShare: Math.round(floor * 100) / 100,
+      playerShare: Math.round((1 - floor) * 100) / 100,
+      counterPartnerShare: Math.round(floor * 100),
+      reason:
+        `${spec.partnerName} won't go that low. They'll come in, but they want their fair share ` +
+        `of what the two of you build.`,
+    };
+  }
+  return {
+    outcome: 'DECLINE',
+    partnerShare: Math.round(floor * 100) / 100,
+    playerShare: Math.round((1 - floor) * 100) / 100,
+    reason: `${spec.partnerName} hears you out and shakes their head. Not on those terms.`,
+  };
 }
 
 // Distribute this month's positive profit of every player-owned shared firm to the

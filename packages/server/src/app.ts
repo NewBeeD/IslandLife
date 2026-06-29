@@ -1,8 +1,10 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import {
   DecisionError,
+  EducationError,
   JobError,
   LoanError,
+  PartnershipError,
   SaleError,
   VentureError,
   applyUpgradeFinancing,
@@ -11,12 +13,16 @@ import {
   detectEducationCompletions,
   discontinueVenture,
   findBorrowerAsset,
+  initiateCrowdfund,
   listAssetForSale,
+  negotiatePartnership,
+  pauseEducation,
   quoteCollateralLoan,
   quoteUpgradeFinancing,
   reopenVenture,
   repayLoan,
   resolveDecision,
+  resumeEducation,
   sellAssetNow,
   setLoanInstallment,
   shelveVenture,
@@ -42,8 +48,10 @@ import { gameDateLabel } from '@island/shared';
 import type {
   AdvanceResultDTO,
   CreateSaveResultDTO,
+  CrowdfundStartResultDTO,
   DecisionResultDTO,
   NarrativeEntry,
+  PartnershipNegotiationResultDTO,
   SaleMode,
   WorldState,
 } from '@island/shared';
@@ -60,6 +68,8 @@ import {
   toCollateralQuoteDTO,
   toCommunityDTO,
   toDecisionDTO,
+  toEducationActionResultDTO,
+  toEducationStatusDTO,
   toFeedDTO,
   toFinancingQuoteDTO,
   toJobsDTO,
@@ -497,6 +507,113 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
       } catch (err) {
         if (err instanceof VentureError) {
           return reply.code(err.code === 'NOT_FOUND' ? 404 : 409).send({ error: err.message });
+        }
+        throw err;
+      }
+    },
+  );
+
+  // POST /saves/:id/decisions/:did/partnership — propose a profit split on a
+  // partnership (Phase 18, P18.3). Body { partnerSharePct }. The partner accepts,
+  // counters, or declines on their hidden utility. On ACCEPT the firm is formed and
+  // persisted; a COUNTER/DECLINE leaves the decision open to propose again.
+  app.post<{ Params: { id: string; did: string }; Body: { partnerSharePct?: number } }>(
+    '/saves/:id/decisions/:did/partnership',
+    async (req, reply) => {
+      const loaded = await loadOr404(req.params.id, reply);
+      if (!loaded) return;
+      const { world } = loaded;
+      const partnerSharePct = Number(req.body?.partnerSharePct ?? NaN);
+      if (!Number.isFinite(partnerSharePct)) {
+        return reply.code(400).send({ error: 'partnerSharePct is required' });
+      }
+      try {
+        const n = negotiatePartnership(world, req.params.did, partnerSharePct);
+        const result: PartnershipNegotiationResultDTO = {
+          outcome: n.outcome,
+          yourSharePct: Math.round(n.playerShare * 100),
+          partnerSharePct: Math.round(n.partnerShare * 100),
+          ...(n.counterPartnerShare != null ? { counterPartnerSharePct: n.counterPartnerShare } : {}),
+          formed: n.outcome === 'ACCEPT',
+          reason: n.reason,
+        };
+        if (n.outcome === 'ACCEPT') {
+          const decision = world.decisions.find((d) => d.id === req.params.did)!;
+          result.acknowledgement = buildDecisionAcknowledgement(world, decision);
+          await saveTick(req.params.id, world);
+        }
+        return result;
+      } catch (err) {
+        if (err instanceof PartnershipError) {
+          const code = err.code === 'NOT_FOUND' ? 404 : err.code === 'EXPIRED' || err.code === 'ALREADY_RESOLVED' ? 409 : 400;
+          return reply.code(code).send({ error: err.message });
+        }
+        throw err;
+      }
+    },
+  );
+
+  // POST /saves/:id/crowdfund — raise money among friends on demand (Phase 18, P18.4).
+  // A standing action: opens a fresh backer slate whenever the player has a fundable
+  // venture and people to ask, rather than waiting for the world to surface one.
+  app.post<{ Params: { id: string } }>('/saves/:id/crowdfund', async (req, reply) => {
+    const loaded = await loadOr404(req.params.id, reply);
+    if (!loaded) return;
+    const { world } = loaded;
+    const opportunity = initiateCrowdfund(world);
+    if (!opportunity) {
+      const result: CrowdfundStartResultDTO = {
+        started: false,
+        decisionId: null,
+        reason:
+          'There is no one to ask just now — you need work worth funding and people around you ' +
+          'with something to put in.',
+      };
+      return result;
+    }
+    await saveTick(req.params.id, world);
+    const result: CrowdfundStartResultDTO = {
+      started: true,
+      decisionId: opportunity.decisionId,
+      reason: 'Word goes out that you are looking. A few who know you come forward.',
+    };
+    return result;
+  });
+
+  // GET /saves/:id/education — the player's current studies (Phase 18, P18.5): their
+  // credential, what they are enrolled in, months left, and whether it is paused.
+  app.get<{ Params: { id: string } }>('/saves/:id/education', async (req, reply) => {
+    const loaded = await loadOr404(req.params.id, reply);
+    if (!loaded) return;
+    return toEducationStatusDTO(loaded.world);
+  });
+
+  // POST /saves/:id/education/:action — pause or resume the current program (Phase 18,
+  // P18.5). Pausing freezes the remaining months and stops the tuition drain; resuming
+  // continues from where it left off. Persists and returns the new study state.
+  app.post<{ Params: { id: string; action: string } }>(
+    '/saves/:id/education/:action',
+    async (req, reply) => {
+      const loaded = await loadOr404(req.params.id, reply);
+      if (!loaded) return;
+      const { world } = loaded;
+      const { action } = req.params;
+      try {
+        let ack: string;
+        if (action === 'pause') {
+          const e = pauseEducation(world);
+          ack = `You set ${e.name} aside for now — the studying stops, and so does the money going out. It will keep until you are ready to take it up again.`;
+        } else if (action === 'resume') {
+          const e = resumeEducation(world);
+          ack = `You take ${e.name} back up where you left it. The evenings get long again, but the end is closer than it was.`;
+        } else {
+          return reply.code(400).send({ error: `unknown education action ${action}` });
+        }
+        await saveTick(req.params.id, world);
+        return toEducationActionResultDTO(world, ack);
+      } catch (err) {
+        if (err instanceof EducationError) {
+          return reply.code(err.code === 'NOT_ENROLLED' ? 404 : 409).send({ error: err.message });
         }
         throw err;
       }

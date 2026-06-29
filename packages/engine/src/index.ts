@@ -71,16 +71,28 @@ export {
 export type { VentureCommitment } from './opportunities';
 export {
   surfaceCrowdfund,
+  initiateCrowdfund,
   surfacePartnership,
   applyBackerFunding,
   applyPartnership,
+  negotiatePartnership,
   distributePartnershipProfit,
   strainFriendDefaults,
   isFriendLoanBank,
   friendBankId,
   friendBackerId,
+  PartnershipError,
   FUNDING_CONSEQUENCE_LAG_MONTHS,
 } from './funding';
+export type { NegotiationOutcome, PartnershipNegotiation } from './funding';
+export {
+  surfaceInvestSolicitation,
+  applyInvestment,
+  accruePlayerInvestments,
+  buildInvestOptions,
+  activeInvestments,
+  estimatedMonthlyReturn,
+} from './investing';
 export {
   credentialLevelOf,
   isEnrolled,
@@ -90,6 +102,9 @@ export {
   chargeTuition,
   detectEducationCompletions,
   monthlyTuition,
+  pauseEducation,
+  resumeEducation,
+  EducationError,
   STUDY_LOAN_MIN_TERM_MONTHS,
   STUDY_LOAN_MAX_TERM_MONTHS,
 } from './education';

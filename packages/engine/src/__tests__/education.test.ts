@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  EducationError,
   applyUpgradeFinancing,
   buildWorld,
+  chargeTuition,
   credentialLevelOf,
   deserializeWorld,
   detectEducationCompletions,
   eligiblePrograms,
+  pauseEducation,
+  resumeEducation,
   serializeWorld,
   simulateOneMonth,
   surfaceOpportunities,
@@ -160,6 +164,68 @@ describe('P14.5 — enrolment is financeable with a study loan', () => {
     expect(world.player.loans).toHaveLength(0);
     expect(world.player.cash).toBe(cashBefore); // tuition drains later, monthly
     expect(world.player.education!.enrolled!.monthlyCost).toBeGreaterThan(0);
+  });
+});
+
+describe('P18.5 — pausing and resuming a program', () => {
+  // Enrol a student (self-funded), then exercise pause/resume directly on the engine.
+  function enrolledStudent(): WorldState {
+    const world = student();
+    surfaceOpportunities(world);
+    const opp = educationOpp(world)!;
+    applyUpgradeFinancing(world, opp.decisionId, opp.enrolment!.totalCost, 24);
+    return world;
+  }
+
+  it('a paused program charges no tuition and makes no progress', () => {
+    const world = enrolledStudent();
+    const e = world.player.education!.enrolled!;
+    const monthsBefore = e.monthsRemaining;
+
+    pauseEducation(world);
+    expect(e.paused).toBe(true);
+    // A month passes: no tuition is due and the remaining term does not move.
+    expect(chargeTuition(world.player)).toBe(0);
+    expect(world.player.education!.enrolled!.monthsRemaining).toBe(monthsBefore);
+    // It cannot complete while paused, even if the term is forced to zero.
+    world.player.education!.enrolled!.monthsRemaining = 0;
+    expect(detectEducationCompletions(world)).toHaveLength(0);
+    expect(credentialLevelOf(world.player)).toBe('NONE');
+  });
+
+  it('resuming continues from where it left off and confers the credential as normal', () => {
+    const world = enrolledStudent();
+    const e = world.player.education!.enrolled!;
+    const target = e.targetLevel;
+
+    // Study a couple of months, then pause for a long stretch.
+    for (let i = 0; i < 3; i++) simulateOneMonth(world);
+    const remainingAtPause = world.player.education!.enrolled!.monthsRemaining;
+    pauseEducation(world);
+    const cashAtPause = world.player.cash;
+    for (let i = 0; i < 5; i++) simulateOneMonth(world);
+    // No progress and no tuition over the paused stretch.
+    expect(world.player.education!.enrolled!.monthsRemaining).toBe(remainingAtPause);
+    expect(world.player.cash).toBeGreaterThan(cashAtPause - 1); // no tuition drained
+
+    // Resume and run out the remaining months — the credential is conferred.
+    resumeEducation(world);
+    expect(world.player.education!.enrolled!.paused).toBe(false);
+    for (let i = 0; i < remainingAtPause; i++) simulateOneMonth(world);
+    expect(world.player.education!.enrolled!.monthsRemaining).toBe(0);
+    expect(detectEducationCompletions(world)).toHaveLength(1);
+    expect(credentialLevelOf(world.player)).toBe(target);
+  });
+
+  it('pausing or resuming out of turn is rejected', () => {
+    const world = student(); // not enrolled
+    expect(() => pauseEducation(world)).toThrow(EducationError);
+    expect(() => resumeEducation(world)).toThrow(EducationError);
+
+    const enrolled = enrolledStudent();
+    expect(() => resumeEducation(enrolled)).toThrow(EducationError); // not paused
+    pauseEducation(enrolled);
+    expect(() => pauseEducation(enrolled)).toThrow(EducationError); // already paused
   });
 });
 

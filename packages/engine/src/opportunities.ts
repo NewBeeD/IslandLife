@@ -51,6 +51,11 @@ import {
   surfaceCrowdfund,
   surfacePartnership,
 } from './funding';
+import {
+  accruePlayerInvestments,
+  applyInvestment,
+  surfaceInvestSolicitation,
+} from './investing';
 import { isWageIndustry, refreshWageRates, wageDailyRate, wageMonthlyIncome } from './wages';
 import { surfaceJobs } from './jobs';
 import { clamp } from './rng';
@@ -658,6 +663,13 @@ export function surfaceOpportunities(world: WorldState): Opportunity[] {
   const sideJob = surfaceSideJob(world);
   if (sideJob) surfaced.push(sideJob);
 
+  // Inbound invitations to invest in someone else's venture (Phase 18). Rare/small for
+  // a poor unknown, larger and more frequent as cash and reputation rise (P18.2).
+  // Surfaced after the existing surfacers so it draws world.rng last, leaving their
+  // rng-dependent outcomes unchanged.
+  const solicitation = surfaceInvestSolicitation(world);
+  if (solicitation) surfaced.push(solicitation);
+
   // The job market — a rotating slate of postings the player can browse (Phase 16).
   // Maintained on world.jobPostings (not returned here, since it is not an
   // Opportunity). Run last so it draws world.rng after the existing surfacers, leaving
@@ -725,6 +737,28 @@ export function resolveDecision(
       if (opportunity) opportunity.status = 'ACCEPTED';
     } else if (opportunity) {
       opportunity.status = 'DECLINED';
+    }
+    return decision;
+  }
+
+  // Investing in someone else's venture (Phase 18, P18.1): the chosen option carries
+  // the return structure (loan / dividend / revenue share); "stay out" is a no-op. The
+  // principal must be on hand. A delayed MEMORY uses the consequence path above.
+  if (decision.kind === 'INVEST_SOLICITATION') {
+    const structure = option.effect.invest?.structure;
+    if (structure && opportunity?.invest) {
+      if (world.player.cash < opportunity.invest.principal) {
+        // Roll back the partial resolution and refuse — the player cannot fund it.
+        decision.chosenOptionId = null;
+        decision.resolvedMonth = null;
+        decision.consequenceMonth = null;
+        throw new DecisionError('You do not have the money to put in.', 'BAD_OPTION');
+      }
+      applyInvestment(world, opportunity.invest, structure);
+      if (opportunity) opportunity.status = 'ACCEPTED';
+    } else {
+      decision.consequenceMonth = null;
+      if (opportunity) opportunity.status = 'DECLINED';
     }
     return decision;
   }
@@ -1123,32 +1157,45 @@ export function updatePlayerIncome(world: WorldState): void {
   // sales and the good/bad-season swing — before income is summed, so a venture's take
   // varies month to month. A no-op for a venture with no production model or profile.
   refreshVenturePerformance(world);
+  // Phase 18 (P18.1): one month's returns on the player's investments in other people's
+  // ventures, folded into income below. 0 (and a no-op) without investments, so the
+  // digest holds. Accrued once here (the advance path), off the golden-master path.
+  const investIncome = accruePlayerInvestments(world);
   // Phase 8: a venture portfolio earns the sum of its active ventures' income; the
   // single-stream fields below are unused once `ventures` is populated.
   if (hasVentures(p)) {
-    p.monthlyIncome = aggregateVentureIncome(world);
+    p.monthlyIncome = aggregateVentureIncome(world) + investIncome;
     return;
   }
   // Phase 15: a single-stream wage worker banks dailyRate × workdays (idea 1).
   if (p.wageProfile && isWageIndustry(p.occupation)) {
-    p.monthlyIncome = wageMonthlyIncome(p.wageProfile);
+    p.monthlyIncome = wageMonthlyIncome(p.wageProfile) + investIncome;
     return;
   }
   if (p.incomeMode === 'STANDING' && p.standingContract) {
-    p.monthlyIncome = p.standingContract.monthlyAmount;
+    p.monthlyIncome = p.standingContract.monthlyAmount + investIncome;
     return;
   }
   if (p.incomeMode === 'SPOT' && p.occupation && p.spotBaseIncome != null) {
     const goodId = REPRESENTATIVE_GOOD[p.occupation];
-    if (!goodId) return;
+    if (!goodId) {
+      p.monthlyIncome = (p.monthlyIncome ?? 0) + investIncome;
+      return;
+    }
     const good = GOODS.find((g) => g.id === goodId);
     const market = world.markets.find((m) => m.goodId === goodId && m.parish === p.parish);
-    if (!good || !market) return;
+    if (!good || !market) {
+      p.monthlyIncome = (p.monthlyIncome ?? 0) + investIncome;
+      return;
+    }
     const factor = clamp(market.currentPrice / good.basePrice, SPOT_MIN_FACTOR, SPOT_MAX_FACTOR);
     // A bigger boat lands more fish: output scales the spot base; seasonality (in the
     // market price) still swings the month-to-month take, lean spells and all.
-    p.monthlyIncome = Math.round(p.spotBaseIncome * (p.outputScale ?? 1) * factor);
+    p.monthlyIncome = Math.round(p.spotBaseIncome * (p.outputScale ?? 1) * factor) + investIncome;
+    return;
   }
+  // No active income mode but the player still draws investment returns: surface them.
+  if (investIncome > 0) p.monthlyIncome = (p.monthlyIncome ?? 0) + investIncome;
 }
 
 // Find decisions whose delayed consequence is due this month and mark them

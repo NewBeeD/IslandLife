@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   EUNICE_DECISION_ID,
+  applyInvestment,
   applyUpgradeFinancing,
   borrowAgainstAsset,
   buildWorld,
@@ -10,9 +11,11 @@ import {
   sellAssetNow,
   simulateOneMonth,
   surfaceCrowdfund,
+  surfaceInvestSolicitation,
   surfacePartnership,
   surfaceOpportunities,
 } from '@island/engine';
+import type { InvestSolicitationSpec } from '@island/shared';
 import { generateMonthlyEntries } from '@island/narrative';
 import type { CreationChoices } from '@island/engine';
 import {
@@ -243,6 +246,49 @@ describe('iceberg-leak contract (P-X1)', () => {
     // The partnership decision likewise.
     const ptDecision = toDecisionDTO(world, partnership!.decisionId);
     assertNoLeak('partnership-decision', ptDecision);
+  });
+
+  it('an invest solicitation, its decision, and the money returns leak no internals (Phase 18)', () => {
+    // A moneyed, well-known player draws inbound invitations to invest in others. The
+    // solicitation's hidden return parameters (rates, shares, success/volatility) must
+    // never cross the wire — the player reads the offer as prose and picks a structure.
+    const world = buildWorld(17, { population: 80 });
+    const p = world.player;
+    p.occupation = 'FISHING';
+    p.employmentStatus = 'SELF_EMPLOYED';
+    p.parish = 'SAINT_JOHN';
+    p.socialCapitalLocal = 0.9;
+    p.socialCapitalInstitutional = 0.7;
+    p.monthlyIncome = 2000;
+    p.cash = 80000;
+    const friends = world.agents.filter((a) => !a.isPlayer).slice(0, 4);
+    for (const f of friends) {
+      f.parish = 'SAINT_JOHN';
+      f.employmentStatus = 'SELF_EMPLOYED';
+      f.occupation = 'RETAIL';
+      f.cash = 5000;
+    }
+    p.socialNetwork = friends.map((a) => a.id);
+
+    // Surface until one appears (the frequency is random but high for this player).
+    let opp = null;
+    for (let i = 0; i < 200 && !opp; i++) {
+      opp = surfaceInvestSolicitation(world);
+      if (!opp) world.month += 1;
+    }
+    expect(opp).not.toBeNull();
+
+    assertNoLeak('opportunities', toOpportunitiesDTO(world));
+    const decision = toDecisionDTO(world, opp!.decisionId);
+    expect(decision!.interaction).toBe('OPTIONS');
+    expect(decision!.options.length).toBeGreaterThanOrEqual(3); // loan / dividend / revenue
+    assertNoLeak('invest-decision', decision);
+
+    // After investing, the money view shows the returns as the player's own income —
+    // financial tokens permitted there, but never the venture's hidden mechanics.
+    const spec: InvestSolicitationSpec = opp!.invest!;
+    applyInvestment(world, spec, 'REVENUE_SHARE');
+    assertNoLeak('money', toMoneyDTO(world), { allowFinancial: true });
   });
 
   it('money view shows the payment AND the player’s own loan interest rate (Phase 7)', () => {

@@ -47,6 +47,7 @@ export function buildDecisionSituation(world: WorldState, decision: PlayerDecisi
   if (decision.kind === 'CROWDFUND') return buildCrowdfundSituation(world, decision);
   if (decision.kind === 'PARTNERSHIP') return buildPartnershipSituation(world, decision);
   if (decision.kind === 'SIDE_JOB') return buildSideJobSituation(world, decision);
+  if (decision.kind === 'INVEST_SOLICITATION') return buildInvestSituation(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'the buyer';
   const amount = standingAmount(decision);
@@ -238,6 +239,31 @@ function buildSideJobSituation(world: WorldState, decision: PlayerDecision): str
   );
 }
 
+// The framing of an invitation to invest in someone else's venture (Phase 18, P18.1):
+// money put into another person's work, and the choice of how it comes back — a steady
+// loan repaid, a cut of the profit, or a slice of the takings. The genuine trade-off —
+// safe-but-capped against tied-to-their-fortunes — stated in prose, no rates.
+function buildInvestSituation(world: WorldState, decision: PlayerDecision): string {
+  const opp = findOpportunity(world, decision);
+  const spec = opp?.invest;
+  const place = parishName(world);
+  if (!spec) {
+    return `Someone has come to you looking for money to put into their work, if you have it to spare.`;
+  }
+  return (
+    `${spec.investeeName} comes to you with a proposition. ${capitalise(spec.ventureLabel)} is ` +
+    `doing well enough that it could do more, and they are short the ${formatCurrency(spec.principal)} ` +
+    `it would take to get there. They would rather have it from someone they know than from a bank.\n\n` +
+    `How you put it in is yours to say. You could lend it plain, to be paid back over time, sure and ` +
+    `steady whatever the work does. You could leave it in for a cut of the profit — more in the good ` +
+    `years, little in the lean ones. Or you could take a slice of every month's takings, up and down ` +
+    `with the trade. The safer the terms, the smaller the upside; the more you tie yourself to how ` +
+    `they do, the more it could come to — or not.\n\n` +
+    `Around ${place} money lent and money shared both have long memories. Do you put anything in, ` +
+    `and if so, on what footing?`
+  );
+}
+
 // A short, in-voice acknowledgement of the choice just made — the line the
 // resolution returns. No outcome, no judgement; the consequence comes later.
 export function buildDecisionAcknowledgement(world: WorldState, decision: PlayerDecision): string {
@@ -247,6 +273,7 @@ export function buildDecisionAcknowledgement(world: WorldState, decision: Player
   if (decision.kind === 'CROWDFUND') return buildCrowdfundAcknowledgement(world, decision);
   if (decision.kind === 'PARTNERSHIP') return buildPartnershipAcknowledgement(world, decision);
   if (decision.kind === 'SIDE_JOB') return buildSideJobAcknowledgement(world, decision);
+  if (decision.kind === 'INVEST_SOLICITATION') return buildInvestAcknowledgement(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'her';
   const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
@@ -327,6 +354,35 @@ function buildSideJobAcknowledgement(world: WorldState, decision: PlayerDecision
   return `You let it go. Your week is full enough as it is, and there will be other work when you have the days for it.`;
 }
 
+// The acknowledgement after investing in someone else's venture (Phase 18): the money
+// put in on the footing chosen, or the proposition let pass. No outcome — the months
+// will tell whether it was money well placed.
+function buildInvestAcknowledgement(world: WorldState, decision: PlayerDecision): string {
+  const opp = findOpportunity(world, decision);
+  const name = opp?.invest?.investeeName ?? 'them';
+  const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
+  const structure = chosen?.effect.invest?.structure;
+  if (!structure) {
+    return `You keep your money in your own pocket. ${capitalise(name)} takes it in good part — there is no hard feeling in a no.`;
+  }
+  if (structure === 'INTEREST') {
+    return (
+      `You count it out to ${name} as a loan, on terms you both understand. It comes back to you ` +
+      `month by month, the way you agreed. A plain arrangement, and a plain trust.`
+    );
+  }
+  if (structure === 'DIVIDEND') {
+    return (
+      `Your money goes in alongside ${name}'s own. You take your share of the profit when there is ` +
+      `profit — your fortunes tied a little to theirs now, for better and for worse.`
+    );
+  }
+  return (
+    `You put it in for a cut off the top of what ${name} sells. Every month's takings carry a little ` +
+    `of yours now — you will feel the good months and the thin ones both.`
+  );
+}
+
 // The acknowledgement after an enrolment choice (Phase 9): the forms signed and the
 // first payment made, or the chance let go by. No outcome — the years do the work.
 function buildEducationAcknowledgement(world: WorldState, decision: PlayerDecision): string {
@@ -379,6 +435,7 @@ export function generateConsequenceEntry(world: WorldState, decision: PlayerDeci
   if (decision.kind === 'NEW_VENTURE') return generateNewVentureConsequence(world, decision);
   if (decision.kind === 'CROWDFUND') return generateCrowdfundConsequence(world, decision);
   if (decision.kind === 'PARTNERSHIP') return generatePartnershipConsequence(world, decision);
+  if (decision.kind === 'INVEST_SOLICITATION') return generateInvestConsequence(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'Eunice';
   const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
@@ -497,6 +554,35 @@ function generatePartnershipConsequence(world: WorldState, decision: PlayerDecis
     `good. The money comes and goes between you by what you agreed, and mostly it holds. You have ` +
     `learned that a thing owned in common is owned by no one wholly, and that this is both its ` +
     `strength and the cost of it.`;
+  return {
+    type: 'MEMORY',
+    text,
+    month: world.month,
+    triggerId: `CONSEQUENCE:${decision.id}`,
+  };
+}
+
+// The delayed MEMORY after putting money into someone else's venture (Phase 18): how
+// the bet on another person's work has sat — a loan repaid quietly, or a share whose
+// worth rose and fell with their fortunes. Connects back without naming the choice.
+function generateInvestConsequence(world: WorldState, decision: PlayerDecision): NarrativeEntry {
+  const opp = findOpportunity(world, decision);
+  const name = opp?.invest?.investeeName ?? 'the one you backed';
+  const label = opp?.invest?.ventureLabel ?? 'their work';
+  const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
+  const structure = chosen?.effect.invest?.structure;
+  const text =
+    structure === 'INTEREST'
+      ? `The money you put into ${label} comes back to you the way it was promised, a little each ` +
+        `month. ${capitalise(name)} has been good for it. There is a quiet satisfaction in money ` +
+        `lent well and paid as agreed — no windfall in it, but no worry either, and a trust between ` +
+        `you that is worth more than the interest. You knew what you were choosing when you chose ` +
+        `the safe road.`
+      : `The money you put into ${label} has done what a stake in another person's work does — risen ` +
+        `in the strong months, gone quiet in the lean ones. Some months it pays better than any loan ` +
+        `would have; some months it pays nothing and you remember it is ${name}'s venture, not yours, ` +
+        `that you are riding. You do the sums and mostly you are glad you went in. Mostly. You knew ` +
+        `you were tying a thread of your fortune to theirs.`;
   return {
     type: 'MEMORY',
     text,

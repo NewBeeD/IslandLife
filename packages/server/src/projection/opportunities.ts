@@ -17,6 +17,7 @@ function titleFor(opp: Opportunity): string {
   if (opp.kind === 'CROWDFUND') return 'Raising money among friends';
   if (opp.kind === 'PARTNERSHIP' && opp.partnership) return `Going in together — ${opp.partnership.companyName}`;
   if (opp.kind === 'SIDE_JOB' && opp.sideJob) return `A job on the side — ${opp.sideJob.label}`;
+  if (opp.kind === 'INVEST_SOLICITATION' && opp.invest) return `${opp.invest.investeeName} wants backing`;
   return opp.npcName;
 }
 
@@ -92,6 +93,18 @@ function descriptionFor(opp: Opportunity): string {
       `Money in your hand at the end of it, if the days are yours to give.`
     );
   }
+  if (opp.kind === 'INVEST_SOLICITATION' && opp.invest) {
+    // The ask is public (you know what they want and for what); how you would take your
+    // return — a loan, a share of the profit, a cut of the takings — is yours to choose,
+    // and the venture's hidden prospects stay unstated. Weighed in prose, not as rates.
+    const iv = opp.invest;
+    return (
+      `${iv.investeeName} is looking for ${formatCurrency(iv.principal)} to put into ${iv.ventureLabel}, ` +
+      `and would rather have it from someone they know than from a bank. You could lend it plain, leave ` +
+      `it in for a share of the profit, or take a cut of the takings — the safer the terms, the smaller ` +
+      `the upside. It is their venture you would be backing, for better or worse.`
+    );
+  }
   return 'An arrangement put to you.';
 }
 
@@ -102,6 +115,7 @@ function sourceFor(opp: Opportunity): string {
   if (opp.kind === 'CROWDFUND') return 'Word: among people who know you.';
   if (opp.kind === 'PARTNERSHIP') return `Heard: directly from ${opp.npcName}.`;
   if (opp.kind === 'SIDE_JOB') return 'Word: a job going round.';
+  if (opp.kind === 'INVEST_SOLICITATION') return `Heard: directly from ${opp.npcName}.`;
   return `Heard: directly from ${opp.npcName}.`;
 }
 
@@ -124,6 +138,9 @@ function windowFor(opp: Opportunity, world: WorldState): string {
   }
   if (opp.kind === 'SIDE_JOB') {
     return monthsLeft <= 1 ? 'They need someone this month.' : 'The work is there for now.';
+  }
+  if (opp.kind === 'INVEST_SOLICITATION') {
+    return monthsLeft <= 1 ? 'They need an answer this month.' : 'They are waiting on your word, but not forever.';
   }
   if (monthsLeft <= 1) return 'She needs an answer this month.';
   return 'She is waiting on your word, but not forever.';

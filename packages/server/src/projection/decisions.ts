@@ -42,6 +42,7 @@ function titleFor(decision: PlayerDecision, opp: Opportunity | undefined): strin
   if (decision.kind === 'CROWDFUND') return 'Raising money among friends';
   if (decision.kind === 'PARTNERSHIP') return opp?.partnership ? `Going in with ${opp.partnership.partnerName}` : 'A partnership';
   if (decision.kind === 'SIDE_JOB') return 'A job on the side';
+  if (decision.kind === 'INVEST_SOLICITATION') return opp?.invest ? `Putting money into ${opp.invest.ventureLabel}` : 'A place to put money';
   return 'A decision';
 }
 
@@ -146,6 +147,16 @@ export function toDecisionDTO(world: WorldState, decisionId: string): DecisionDT
         ? 'It is there for now, but not forever.'
         : 'She is waiting on your word, but not forever.';
 
+  // Phase 18 (P18.3): a partnership can be negotiated — surface the default split so the
+  // client can offer "go in at this split" or "propose your own".
+  const negotiation =
+    decision.kind === 'PARTNERSHIP' && opp?.partnership
+      ? {
+          defaultPartnerSharePct: Math.round(opp.partnership.partnerShare * 100),
+          defaultYourSharePct: Math.round((1 - opp.partnership.partnerShare) * 100),
+        }
+      : undefined;
+
   return {
     id: decision.id,
     title: titleFor(decision, opp),
@@ -157,6 +168,7 @@ export function toDecisionDTO(world: WorldState, decisionId: string): DecisionDT
       description: o.description,
     })),
     financing: isFinancing ? financingFor(world, opp) : undefined,
+    ...(negotiation ? { negotiation } : {}),
     status,
     window,
     chosenOptionId: decision.chosenOptionId,

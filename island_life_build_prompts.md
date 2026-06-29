@@ -37,9 +37,12 @@ of work with an acceptance test, the files it touches, and its dependencies.
   choice; shared-asset fuel is charged once; the juice stand earns through a concrete,
   randomized passion-fruit model; ventures carry a hidden success/volatility profile so some
   underperform or swing, and can be shelved/discontinued/sold; any active venture is reachable
-  for its next upgrade). **Next:** the rest of the `ideas.md` playtest backlog — **Phases
-  18–19** (negotiable/always-on deals), then the original post-slice backlog (P-B1 firm
-  formation onward).
+  for its next upgrade), and Phase 18 deal-making (invest in someone else's venture and choose
+  how the return comes back — a loan, a dividend, or a revenue share; inbound solicitations that
+  scale with the player's wealth + reputation; negotiable partnership splits the NPC accepts /
+  counters / declines; crowdfunding as a standing on-demand action; and schooling that can be
+  paused and resumed). **Next:** the `ideas.md` playtest backlog is complete (Phases 13–18);
+  the original post-slice backlog (P-B1 firm formation onward) is what remains.
 
 ## How to read this
 
@@ -1131,7 +1134,7 @@ These are the guardrails I follow on every change; they're not steps, they're co
   `VentureActionResultDTO`; `POST /saves/:id/ventures/:ventureId/{discontinue,shelve,reopen}`;
   `web/views/Money.tsx` venture controls + the commitment radios in `Opportunities.tsx`.
 
-## Phase 18 — Deal-making: terms, returns & always-on funding 🟢
+## Phase 18 — Deal-making: terms, returns & always-on funding ✅ DONE
 
 > Goal: investment and partnership offers become **negotiable** and **wealth-scaled**,
 > crowdfunding is **always reachable** rather than a rare event, and schooling can be
@@ -1179,9 +1182,49 @@ These are the guardrails I follow on every change; they're not steps, they're co
   and makes no progress; resuming finishes the remaining months and confers the
   credential as normal.
 
-- *Phase acceptance:* `typecheck` ×2 + `npm test` green; the player picks a return
-  structure on an investment, counters a partnership to 35%, raises a crowdfund on
-  demand, and pauses then resumes a course; iceberg clean, digest changes noted.
+- *Phase acceptance:* ✅ `npm run typecheck && npm run typecheck:web && npm test` green
+  (226 tests; +16 for Phase 18 — 6 in `engine/__tests__/investing.test.ts`, 6 in
+  `engine/__tests__/partnershipNegotiation.test.ts`, 3 added to `education.test.ts`, plus
+  a Phase-18 case in the iceberg contract). Deals are now negotiable, scaled, on-demand,
+  and pausable. **Invest in others (P18.1):** a new `INVEST_SOLICITATION` opportunity —
+  an NPC the player knows comes asking the player to fund THEIR venture — surfaces an
+  OPTIONS decision where the player chooses how the return comes back: a **loan**
+  (principal + interest amortized over a term, the capped/safe option), a **dividend** (a
+  yearly cut of the profit, paid in good months only), or a **revenue share** (a slice of
+  every month's takings). A new `engine/investing.ts` (pure, S1) holds the claim model
+  (`PlayerInvestment` on the agent), `applyInvestment` (principal moves player→investee),
+  and `accruePlayerInvestments` (one month's inflow per claim, summed into income through
+  `updatePlayerIncome` so it reaches cash via phase 5 — off the golden-master path). The
+  same offer pays a genuinely different monthly inflow under each structure. **Scaled
+  solicitations (P18.2):** `surfaceInvestSolicitation` is gated by a wealth/reputation
+  frequency roll and sizes the ask (and its volatility/upside) the same way, so a broke
+  unknown is rarely solicited and only for small sums while a wealthy, well-known player
+  draws bigger, more frequent, riskier propositions — deterministic per seed.
+  **Negotiable partnerships (P18.3):** `negotiatePartnership(world, decisionId,
+  partnerSharePct)` lets the player propose the profit split; the partner accepts (the
+  firm forms at the agreed split), counters at the least they will take, or declines —
+  driven by their hidden agreeableness/patience, apply-and-find-out (`applyPartnership`
+  now takes an optional `agreedPartnerShare`). Surfaced at
+  `POST /saves/:id/decisions/:did/partnership`; the web decision panel adds a "propose
+  your split" slider that takes a counter in one click. **Crowdfunding on demand (P18.4):**
+  `initiateCrowdfund` makes raising money among friends a standing action — the player can
+  start a round whenever they have a fundable venture and people to ask, bypassing the
+  passive from-month gate and re-offer cooldown (but never stacking two live rounds on one
+  venture); surfaced at `POST /saves/:id/crowdfund` with a "Raise money among friends"
+  button. **Pause/resume school (P18.5):** `pauseEducation`/`resumeEducation` freeze
+  `monthsRemaining` and stop the tuition drain (`chargeTuition`/`detectEducationCompletions`
+  skip a paused program), resuming re-bases the completion month onto the months still
+  left; surfaced at `POST /saves/:id/education/{pause,resume}` + `GET /saves/:id/education`,
+  with a "Your studies" panel. New types: `InvestReturnStructure`/`InvestSolicitationSpec`/
+  `PlayerInvestment` + `investments?` on `NPCAgent` + `invest?` on `Opportunity` +
+  `EnrolledProgram.paused`; `PartnershipNegotiationResultDTO`, `CrowdfundStartResultDTO`,
+  `EducationStatusDTO`/`EducationActionResultDTO`, and `DecisionDTO.negotiation`. All of it
+  is additive and off the digest path (surfacing and accrual run only on the advance/resolve
+  path, never `simulateOneMonth` or the golden master), so the no-feature player stays
+  byte-identical and the determinism digest is **unchanged** (S2). The iceberg contract
+  snapshots the invest solicitation, its decision, and the money returns: the hidden
+  rates/shares/success/volatility never cross the wire — the player reads the offer as
+  prose and picks a structure (S3).
 
 ---
 

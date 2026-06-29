@@ -199,6 +199,9 @@ export interface EnrolledProgram {
   monthsRemaining: number;
   monthlyCost: number; // EC$/month tuition
   completionMonth: number; // world.month at which it finishes
+  // Phase 18 (P18.5): a paused program freezes `monthsRemaining` and stops the tuition
+  // drain; resuming continues from where it left off. Undefined/false → studying.
+  paused?: boolean;
 }
 
 export interface Education {
@@ -448,6 +451,12 @@ export interface NPCAgent {
   // position's attached costs so the Money view shows pay net of transport/food.
   // Undefined for NPCs and a self-employed player (the digest holds).
   currentJob?: TakenJob;
+
+  // ── Phase 18: claims the player holds from investing in others ──────────────
+  // Optional. The ventures the player has put money into (as a loan, a dividend, or a
+  // revenue share). Each pays a monthly inflow tied to the NPC venture's fortunes.
+  // Undefined for NPCs and a player who has never invested (the digest holds).
+  investments?: PlayerInvestment[];
 }
 
 export interface ActivePolicy {
@@ -502,7 +511,8 @@ export type OpportunityKind =
   | 'NEW_VENTURE'
   | 'CROWDFUND'
   | 'PARTNERSHIP'
-  | 'SIDE_JOB';
+  | 'SIDE_JOB'
+  | 'INVEST_SOLICITATION';
 export type OpportunityStatus = 'OPEN' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
 
 // The hidden spec of a new-venture opportunity (Phase 10). Cross-domain entry: a
@@ -601,6 +611,65 @@ export interface SideJobSpec {
   days: number; // days of work the job runs
 }
 
+// ── Investing in someone else's venture (Phase 18, P18.1/P18.2) ──────────────
+// The other side of crowdfunding: an NPC the player knows comes asking the player to
+// put money into THEIR venture, and the player chooses how the return comes back —
+// interest + principal (a loan to them), a dividend, or a share of revenue (P18.1).
+// These inbound solicitations are rare and small for a poor/unknown player and grow
+// larger, more frequent, and riskier as the player's cash and reputation rise (P18.2).
+// All figures here are hidden mechanics — the player reads the offer as prose.
+export type InvestReturnStructure = 'INTEREST' | 'DIVIDEND' | 'REVENUE_SHARE';
+
+export interface InvestSolicitationSpec {
+  id: string; // stable per surfaced solicitation
+  investeeId: string; // the NPC asking for money
+  investeeName: string;
+  ventureLabel: string; // player-facing: "her shop", "his boat"
+  industry: Industry;
+  principal: number; // EC$ the NPC is asking the player to put in
+  termMonths: number; // the horizon for the INTEREST structure
+  // Hidden per-structure return parameters (never projected raw).
+  interestRate: number; // INTEREST — annual; principal returned over the term
+  dividendAnnualRate: number; // DIVIDEND — annual % of principal, good months only
+  revenueShare: number; // REVENUE_SHARE — 0–1 of the venture's monthly revenue
+  monthlyRevenueBase: number; // the venture's base monthly revenue (revenue share)
+  // The NPC venture's hidden success/volatility, driving the dividend/revenue swing.
+  successBias: number;
+  volatility: number;
+}
+
+// A claim the player holds after investing in an NPC's venture (Phase 18). INTEREST is
+// the player holding a loan as the creditor (principal returned with interest over a
+// term); DIVIDEND and REVENUE_SHARE are open-ended income claims tied to the venture's
+// fortunes (higher expected return, more variable, no principal returned). Optional on
+// the agent — absent `investments` is byte-identical to before (the digest holds).
+export interface PlayerInvestment {
+  id: string;
+  investeeId: string;
+  investeeName: string;
+  ventureLabel: string;
+  industry: Industry;
+  structure: InvestReturnStructure;
+  principal: number; // EC$ the player put in
+  startMonth: number;
+  status: 'ACTIVE' | 'CLOSED';
+  // INTEREST — amortized like a loan the player holds.
+  interestRate?: number; // annual
+  termMonths?: number;
+  remainingPrincipal?: number;
+  monthlyPayment?: number;
+  // DIVIDEND / REVENUE_SHARE — open-ended, swing with the venture's month.
+  dividendAnnualRate?: number;
+  revenueShare?: number;
+  monthlyRevenueBase?: number;
+  successBias?: number;
+  volatility?: number;
+  // Bookkeeping the projection reads without re-drawing rng: this month's inflow and
+  // the running total the claim has returned so far (the player's own money facts).
+  lastReturn?: number;
+  totalReturned?: number;
+}
+
 export interface Opportunity {
   id: string;
   kind: OpportunityKind;
@@ -622,6 +691,7 @@ export interface Opportunity {
   crowdfund?: CrowdfundSpec; // present for CROWDFUND opportunities (Phase 11)
   partnership?: PartnershipSpec; // present for PARTNERSHIP opportunities (Phase 11)
   sideJob?: SideJobSpec; // present for SIDE_JOB opportunities (Phase 15)
+  invest?: InvestSolicitationSpec; // present for INVEST_SOLICITATION opportunities (Phase 18)
 }
 
 // The logical identity of an offer — the (kind, target) it concerns, independent of
@@ -645,6 +715,8 @@ export function opportunityLogicalKey(opp: Opportunity): string {
       return `PARTNERSHIP:${opp.partnership?.partnerId ?? ''}:${opp.partnership?.id ?? ''}`;
     case 'SIDE_JOB':
       return `SIDE_JOB:${opp.sideJob?.id ?? ''}`;
+    case 'INVEST_SOLICITATION':
+      return `INVEST_SOLICITATION:${opp.invest?.investeeId ?? ''}:${opp.invest?.id ?? ''}`;
   }
 }
 
@@ -691,6 +763,7 @@ export interface DecisionOption {
     funding?: BackerOffer; // CROWDFUND — the backer offer this option takes
     accept?: boolean; // PARTNERSHIP — true on the "go in" option
     sideJobPayout?: number; // SIDE_JOB — EC$ paid on completion of the "take it" option
+    invest?: { structure: InvestReturnStructure }; // INVEST_SOLICITATION — chosen return shape
   };
 }
 

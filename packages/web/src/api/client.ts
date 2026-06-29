@@ -5,14 +5,18 @@ import type {
   CollateralQuoteDTO,
   CommunityDTO,
   CreateSaveResultDTO,
+  CrowdfundStartResultDTO,
   DecisionDTO,
   DecisionResultDTO,
+  EducationActionResultDTO,
+  EducationStatusDTO,
   FeedDTO,
   FinancingQuoteDTO,
   JobsDTO,
   LoanActionResultDTO,
   MoneyDTO,
   OpportunitiesDTO,
+  PartnershipNegotiationResultDTO,
   SaleMode,
   SkillsDTO,
   StateDTO,
@@ -112,6 +116,27 @@ export const api = {
     return post<DecisionResultDTO>(`/saves/${saveId}/decisions/${decisionId}`, {
       financing: { downPayment, termMonths, ...(commitment ? { commitment } : {}) },
     });
+  },
+  // Phase 18 (P18.3): propose a profit split on a partnership.
+  proposePartnership(saveId: string, decisionId: string, partnerSharePct: number) {
+    return post<PartnershipNegotiationResultDTO>(
+      `/saves/${saveId}/decisions/${decisionId}/partnership`,
+      { partnerSharePct },
+    );
+  },
+  // Phase 18 (P18.4): raise money among friends on demand.
+  startCrowdfund(saveId: string) {
+    return post<CrowdfundStartResultDTO>(`/saves/${saveId}/crowdfund`);
+  },
+  // Phase 18 (P18.5): the player's current studies, and pause/resume.
+  education(saveId: string) {
+    return get<EducationStatusDTO>(`/saves/${saveId}/education`);
+  },
+  pauseEducation(saveId: string) {
+    return post<EducationActionResultDTO>(`/saves/${saveId}/education/pause`);
+  },
+  resumeEducation(saveId: string) {
+    return post<EducationActionResultDTO>(`/saves/${saveId}/education/resume`);
   },
   ventureAction(saveId: string, ventureId: string, action: 'discontinue' | 'shelve' | 'reopen') {
     return post<VentureActionResultDTO>(`/saves/${saveId}/ventures/${ventureId}/${action}`);

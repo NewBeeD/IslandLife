@@ -1,6 +1,7 @@
 import { GOODS, REPRESENTATIVE_GOOD, gameDateLabel } from '@island/shared';
 import {
   JOB_VENTURE_ID,
+  activeInvestments,
   activeVentures,
   friendBackerId,
   hasVentures,
@@ -130,6 +131,22 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
             ? INCOME_LINE_LABEL[p.occupation]
             : 'Odd jobs';
       incomeLines.push({ label, amount: Math.round(income) });
+    }
+  }
+  // Phase 18: returns on the player's investments in other people's ventures are folded
+  // into monthlyIncome by the engine. Show them as their own line(s) so the player sees
+  // each claim paying; for the single-stream player, peel the realised return back out
+  // of the occupation line so the income total still reconciles to the cash math.
+  const investments = activeInvestments(p);
+  const investRealised = investments.reduce((s, i) => s + Math.max(0, Math.round(i.lastReturn ?? 0)), 0);
+  if (investRealised > 0) {
+    if (!portfolio && incomeLines.length > 0) {
+      incomeLines[0]!.amount = Math.max(0, incomeLines[0]!.amount - investRealised);
+      if (incomeLines[0]!.amount === 0) incomeLines.shift();
+    }
+    for (const inv of investments) {
+      const amt = Math.round(inv.lastReturn ?? 0);
+      if (amt > 0) incomeLines.push({ label: `Return from ${inv.ventureLabel}`, amount: amt });
     }
   }
   const incomeTotal = incomeLines.reduce((s, l) => s + l.amount, 0);

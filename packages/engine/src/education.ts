@@ -169,12 +169,46 @@ export function enrolPlayer(world: WorldState, program: EducationProgram): void 
 
 // The tuition due from an agent this month; decrements the remaining term. 0 for
 // everyone not enrolled, so NPC/default-player cash math is unchanged (the digest
-// holds). Called once per agent per month in simulateOneMonth phase 5.
+// holds). A paused program (P18.5) charges nothing and makes no progress. Called once
+// per agent per month in simulateOneMonth phase 5.
 export function chargeTuition(agent: NPCAgent): number {
   const e = agent.education?.enrolled;
-  if (!e || e.monthsRemaining <= 0) return 0;
+  if (!e || e.paused || e.monthsRemaining <= 0) return 0;
   e.monthsRemaining -= 1;
   return e.monthlyCost;
+}
+
+export class EducationError extends Error {
+  constructor(
+    message: string,
+    readonly code: 'NOT_ENROLLED' | 'ALREADY_PAUSED' | 'NOT_PAUSED',
+  ) {
+    super(message);
+    this.name = 'EducationError';
+  }
+}
+
+// Pause the player's current program (P18.5): freeze its remaining months and stop the
+// tuition drain. Resuming later continues from exactly where it left off. Mutates the
+// player; throws if there is nothing to pause or it is already paused.
+export function pauseEducation(world: WorldState): EnrolledProgram {
+  const e = world.player.education?.enrolled;
+  if (!e) throw new EducationError('You are not enrolled in anything to pause.', 'NOT_ENROLLED');
+  if (e.paused) throw new EducationError('Your studies are already paused.', 'ALREADY_PAUSED');
+  e.paused = true;
+  return e;
+}
+
+// Resume a paused program (P18.5): un-freeze it and re-base the completion month onto
+// the months still left, so the remaining term finishes from here. Throws if there is
+// nothing paused to resume.
+export function resumeEducation(world: WorldState): EnrolledProgram {
+  const e = world.player.education?.enrolled;
+  if (!e) throw new EducationError('You are not enrolled in anything to resume.', 'NOT_ENROLLED');
+  if (!e.paused) throw new EducationError('Your studies are not paused.', 'NOT_PAUSED');
+  e.paused = false;
+  e.completionMonth = world.month + e.monthsRemaining;
+  return e;
 }
 
 // Apply a completed program's effects: raise the relevant knowledge + general
@@ -201,7 +235,7 @@ export function detectEducationCompletions(world: WorldState): EnrolledProgram[]
   const done: EnrolledProgram[] = [];
   for (const agent of world.agents) {
     const e = agent.education?.enrolled;
-    if (e && e.monthsRemaining <= 0) {
+    if (e && !e.paused && e.monthsRemaining <= 0) {
       applyCompletion(agent, e);
       agent.education!.enrolled = null;
       done.push(e);

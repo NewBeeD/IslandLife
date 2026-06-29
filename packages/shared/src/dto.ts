@@ -289,6 +289,14 @@ export interface FinancingControlDTO {
   commitment?: FinancingCommitmentDTO;
 }
 
+// A negotiable partnership (Phase 18, P18.3). The player may go in at the default
+// split (an option) OR propose their own share; the partner accepts/counters/declines.
+// Plain percentages — the player's own deal terms, no hidden mechanics.
+export interface PartnershipNegotiationControlDTO {
+  defaultPartnerSharePct: number; // the partner's share under the default offer
+  defaultYourSharePct: number; // the player's share under the default offer
+}
+
 export interface DecisionDTO {
   id: string;
   title: string; // "Eunice's offer" / "A bigger boat"
@@ -298,6 +306,8 @@ export interface DecisionDTO {
   interaction: 'OPTIONS' | 'FINANCING';
   options: DecisionOptionDTO[]; // populated for 'OPTIONS'
   financing?: FinancingControlDTO; // populated for 'FINANCING'
+  // Present for a PARTNERSHIP decision: the player may negotiate the split (P18.3).
+  negotiation?: PartnershipNegotiationControlDTO;
   status: 'OPEN' | 'RESOLVED' | 'EXPIRED';
   window: string; // "She needs an answer this month"
   chosenOptionId: string | null;
@@ -391,6 +401,50 @@ export interface VentureActionResultDTO {
   ventureId: string;
   status: 'ACTIVE' | 'CLOSED' | 'SHELVED';
   cashInHand: number; // EC$ after the action
+  acknowledgement: string;
+}
+
+// POST /saves/:id/decisions/:did/partnership — propose a profit split on a partnership
+// (Phase 18, P18.3). The partner accepts, counters, or declines on their hidden
+// utility (apply-and-find-out — no score shown). Shares are plain percentages (the
+// player's own deal terms), not the hidden engine `share` fields.
+export interface PartnershipNegotiationResultDTO {
+  outcome: 'ACCEPT' | 'COUNTER' | 'DECLINE';
+  yourSharePct: number; // 0–100 the player would hold
+  partnerSharePct: number; // 0–100 the partner would hold
+  counterPartnerSharePct?: number; // COUNTER — re-propose this to seal it
+  formed: boolean; // true once the firm is struck (ACCEPT)
+  reason: string; // plain language
+  acknowledgement?: string; // in-voice line, present on ACCEPT
+}
+
+// POST /saves/:id/crowdfund — raise money among friends on demand (Phase 18, P18.4).
+// Either a fresh round was opened (its decision can now be acted on) or there was
+// nothing to fund / no one to ask.
+export interface CrowdfundStartResultDTO {
+  started: boolean;
+  decisionId: string | null; // the decision to open when a round was raised
+  reason: string;
+}
+
+// GET /saves/:id/education — the player's current studies (Phase 18, P18.5), so the
+// client can show progress and a pause/resume control. The player's own facts —
+// program name as prose, months left, paused flag; no hidden mechanics.
+export interface EducationStatusDTO {
+  credential: string; // the formal level held, in prose
+  enrolled: boolean;
+  programName: string | null; // "a bachelor's degree at the State College"
+  monthsLeft: number; // months of study remaining
+  paused: boolean;
+}
+
+// POST /saves/:id/education/{pause,resume} — pause or resume the current program
+// (Phase 18, P18.5). Returns the new study state and a short in-voice line.
+export interface EducationActionResultDTO {
+  enrolled: boolean;
+  programName: string | null;
+  monthsLeft: number;
+  paused: boolean;
   acknowledgement: string;
 }
 

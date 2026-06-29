@@ -617,3 +617,50 @@ button:disabled {
   font-size: 0.8rem;
   color: var(--muted);
 }
+
+/* Phase 18 — standing actions (raise money, studies) and partnership negotiation */
+.secondary {
+  background: var(--paper);
+  color: var(--ink, #1f2937);
+  border: 1px solid var(--sea);
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+}
+.secondary:hover:not(:disabled) {
+  background: rgba(31, 93, 107, 0.08);
+}
+.opps__standing {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1.6rem;
+  padding-bottom: 1.2rem;
+  border-bottom: 1px solid var(--line);
+}
+.opps__action,
+.opps__studies {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  line-height: 1.5;
+}
+.negotiation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin-bottom: 1rem;
+  padding: 0.8rem;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+}
+.negotiation__result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  line-height: 1.5;
+}
+.negotiation__result--decline {
+  color: var(--muted);
+}

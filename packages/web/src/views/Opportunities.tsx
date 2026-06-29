@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import type {
   DecisionDTO,
+  EducationStatusDTO,
   FinancingQuoteDTO,
   OpportunitiesDTO,
   OpportunityDTO,
+  PartnershipNegotiationResultDTO,
 } from '@island/shared';
 import { api, type VentureCommitmentInput } from '../api/client';
 
@@ -32,17 +34,20 @@ export function Opportunities({
   const { active, possible, expired } = opportunities;
   const nothing = active.length === 0 && possible.length === 0 && expired.length === 0;
 
-  if (nothing) {
-    return (
-      <p className="muted">
-        You have not heard of anything worth acting on yet. Word travels — keep at the work
-        and keep your ears open.
-      </p>
-    );
-  }
-
   return (
     <div className="opps">
+      {/* Phase 18: standing actions the player can take any time, not surfaced offers. */}
+      <section className="opps__standing">
+        <RaiseMoneyButton saveId={saveId} onResolved={onResolved} />
+        <StudiesPanel saveId={saveId} onResolved={onResolved} />
+      </section>
+
+      {nothing && (
+        <p className="muted">
+          You have not heard of anything worth acting on yet. Word travels — keep at the work
+          and keep your ears open.
+        </p>
+      )}
       {active.length > 0 && (
         <section className="opps__group">
           <h3>Open</h3>
@@ -145,6 +150,17 @@ function OpportunityCard({
       {decision && decision.interaction === 'OPTIONS' && (
         <div className="decision">
           <p className="decision__situation">{decision.situation}</p>
+          {decision.negotiation && (
+            <NegotiationPanel
+              saveId={saveId}
+              decisionId={decision.id}
+              negotiation={decision.negotiation}
+              onResolved={async () => {
+                setDecision(null);
+                await onResolved();
+              }}
+            />
+          )}
           <div className="decision__options">
             {decision.options.map((o) => (
               <button key={o.id} className="decision__option" onClick={() => choose(o.id)} disabled={busy}>
@@ -371,6 +387,175 @@ function FinancingPanel({
       </div>
 
       {error && <p className="error">{error}</p>}
+    </div>
+  );
+}
+
+// Phase 18 (P18.4): a standing action to raise money among friends whenever the player
+// has work worth funding — not a surfaced one-off. Opening a round adds a crowdfund
+// decision the player can then act on like any other.
+function RaiseMoneyButton({
+  saveId,
+  onResolved,
+}: {
+  saveId: string;
+  onResolved: () => void | Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const raise = useCallback(async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await api.startCrowdfund(saveId);
+      setNote(r.reason);
+      if (r.started) await onResolved();
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [saveId, onResolved]);
+
+  return (
+    <div className="opps__action">
+      <button className="secondary" onClick={raise} disabled={busy}>
+        {busy ? 'Asking around…' : 'Raise money among friends'}
+      </button>
+      {note && <span className="muted"> {note}</span>}
+    </div>
+  );
+}
+
+// Phase 18 (P18.5): the player's current studies, with pause/resume. Pausing stops the
+// tuition going out and freezes progress; resuming picks up where it left off.
+function StudiesPanel({
+  saveId,
+  onResolved,
+}: {
+  saveId: string;
+  onResolved: () => void | Promise<void>;
+}) {
+  const [status, setStatus] = useState<EducationStatusDTO | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      setStatus(await api.education(saveId));
+    } catch {
+      /* studies are optional; ignore a fetch error */
+    }
+  }, [saveId]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const act = useCallback(
+    async (which: 'pause' | 'resume') => {
+      setBusy(true);
+      try {
+        await (which === 'pause' ? api.pauseEducation(saveId) : api.resumeEducation(saveId));
+        await refresh();
+        await onResolved();
+      } catch {
+        /* surfaced elsewhere; keep the panel quiet */
+      } finally {
+        setBusy(false);
+      }
+    },
+    [saveId, refresh, onResolved],
+  );
+
+  if (!status || !status.enrolled) return null;
+  return (
+    <div className="opps__studies">
+      <span>
+        Studying <strong>{status.programName}</strong> — {status.monthsLeft} month
+        {status.monthsLeft === 1 ? '' : 's'} to go{status.paused ? ' (paused)' : ''}.
+      </span>
+      {status.paused ? (
+        <button className="secondary" onClick={() => act('resume')} disabled={busy}>
+          Take it back up
+        </button>
+      ) : (
+        <button className="secondary" onClick={() => act('pause')} disabled={busy}>
+          Pause for now
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Phase 18 (P18.3): propose a profit split on a partnership. The player drags their own
+// share; the partner accepts, counters, or declines. A counter can be taken in one click.
+function NegotiationPanel({
+  saveId,
+  decisionId,
+  negotiation,
+  onResolved,
+}: {
+  saveId: string;
+  decisionId: string;
+  negotiation: NonNullable<DecisionDTO['negotiation']>;
+  onResolved: () => void | Promise<void>;
+}) {
+  const [yourShare, setYourShare] = useState(negotiation.defaultYourSharePct);
+  const [result, setResult] = useState<PartnershipNegotiationResultDTO | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const propose = useCallback(
+    async (partnerSharePct: number) => {
+      setBusy(true);
+      try {
+        const r = await api.proposePartnership(saveId, decisionId, partnerSharePct);
+        setResult(r);
+        if (r.outcome === 'ACCEPT') await onResolved();
+      } catch {
+        /* leave the panel; the player can try a different split */
+      } finally {
+        setBusy(false);
+      }
+    },
+    [saveId, decisionId, onResolved],
+  );
+
+  return (
+    <div className="negotiation">
+      <label className="financing__field">
+        <span>
+          Propose to take <strong>{yourShare}%</strong> for yourself
+          <span className="muted"> (they get {100 - yourShare}%)</span>
+        </span>
+        <input
+          type="range"
+          min={5}
+          max={95}
+          step={5}
+          value={yourShare}
+          onChange={(e) => setYourShare(Number(e.target.value))}
+          disabled={busy}
+        />
+      </label>
+      <button className="secondary" onClick={() => propose(100 - yourShare)} disabled={busy}>
+        {busy ? 'Putting it to them…' : 'Propose this split'}
+      </button>
+      {result && result.outcome !== 'ACCEPT' && (
+        <div className={`negotiation__result negotiation__result--${result.outcome.toLowerCase()}`}>
+          <p>{result.reason}</p>
+          {result.outcome === 'COUNTER' && result.counterPartnerSharePct != null && (
+            <button
+              className="secondary"
+              onClick={() => propose(result.counterPartnerSharePct!)}
+              disabled={busy}
+            >
+              Take their offer — they hold {result.counterPartnerSharePct}%, you{' '}
+              {100 - result.counterPartnerSharePct}%
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
