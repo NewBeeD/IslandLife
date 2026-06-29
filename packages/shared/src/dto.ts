@@ -143,6 +143,49 @@ export interface SkillsDTO {
   wage?: WageSummaryDTO; // present for a wage worker — their current day rate
 }
 
+// GET /saves/:id/jobs — the job market (Phase 16). A slate of postings the player
+// can browse: pay, the costs attached to the job (transport, food), the net of the
+// two, and the requirements in prose. Pay/cost figures are public offer information
+// (a job ad) and the player's own prospective money — EC$ is shown, like the money
+// view — but the hidden gating thresholds and stability never appear as numbers (S3).
+export interface JobCostLineDTO {
+  label: string; // "Getting to work" / "Food on the job"
+  amount: number; // EC$/month
+}
+
+export interface JobPostingDTO {
+  id: string; // the posting's id, so the player can take it
+  title: string; // "general labourer with a Roseau contractor"
+  industry: string; // display label, e.g. "Construction"
+  pay: string; // prose summary, e.g. "EC$95 a day · about EC$1,900 a month"
+  grossPerMonth: number; // EC$/month before the attached costs
+  costs: JobCostLineDTO[]; // the attached costs, itemized
+  costsPerMonth: number; // EC$/month — sum of the attached costs
+  netPerMonth: number; // EC$/month — gross minus the attached costs
+  requirements: string; // prose, e.g. "Open to anyone" / "Needs a certificate"
+  stability: string; // prose, e.g. "Steady work" / "Seasonal" / "Casual, day to day"
+  window: string; // prose, e.g. "Hiring this month" / "The post is open for now"
+  current: boolean; // true if this is the job the player currently holds
+}
+
+export interface JobsDTO {
+  // The job the player holds now, if any, with its net pay — so the market reads as a
+  // comparison against where they already are.
+  held: { title: string; netPerMonth: number } | null;
+  postings: JobPostingDTO[]; // the open slate, most net-rewarding first
+}
+
+// POST /saves/:id/jobs/:jobId/take — the outcome of taking a job. The player's own
+// money facts (gross, costs, net), like the money view, plus a short in-voice line.
+export interface TakeJobResultDTO {
+  postingId: string;
+  title: string;
+  grossPerMonth: number; // EC$/month
+  costsPerMonth: number; // EC$/month attached
+  netPerMonth: number; // EC$/month
+  acknowledgement: string;
+}
+
 // GET /saves/:id/feed?month= — the Daily Life feed for a month.
 export interface FeedEntryDTO {
   type: NarrativeEntryType;

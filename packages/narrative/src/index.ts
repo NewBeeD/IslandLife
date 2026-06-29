@@ -46,6 +46,7 @@ export type { GenerateResult } from './generate';
 export {
   buildDecisionSituation,
   buildDecisionAcknowledgement,
+  buildJobTakenAcknowledgement,
   generateConsequenceEntry,
   generateEducationCompletionEntry,
 } from './decisions';

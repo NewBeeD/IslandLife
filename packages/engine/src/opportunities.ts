@@ -43,6 +43,7 @@ import {
   surfacePartnership,
 } from './funding';
 import { isWageIndustry, refreshWageRates, wageDailyRate, wageMonthlyIncome } from './wages';
+import { surfaceJobs } from './jobs';
 import { clamp } from './rng';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -634,6 +635,12 @@ export function surfaceOpportunities(world: WorldState): Opportunity[] {
   // Independent side jobs for an experienced wage worker (Phase 15).
   const sideJob = surfaceSideJob(world);
   if (sideJob) surfaced.push(sideJob);
+
+  // The job market — a rotating slate of postings the player can browse (Phase 16).
+  // Maintained on world.jobPostings (not returned here, since it is not an
+  // Opportunity). Run last so it draws world.rng after the existing surfacers, leaving
+  // their rng-dependent outcomes unchanged.
+  surfaceJobs(world);
 
   return surfaced;
 }

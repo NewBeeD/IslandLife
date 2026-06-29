@@ -255,6 +255,7 @@ export function buildWorld(seed: number, opts: BuildOptions = {}): WorldState {
     playerNotifications: [],
     opportunities: [],
     decisions: [],
+    jobPostings: [],
     rng,
   };
 

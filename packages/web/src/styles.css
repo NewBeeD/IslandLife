@@ -545,3 +545,75 @@ button:disabled {
   align-items: center;
   justify-content: center;
 }
+
+/* Jobs — the job market (Phase 16) */
+.jobs {
+  max-width: 34rem;
+}
+.jobs__held {
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--line);
+  line-height: 1.55;
+}
+.jobs__note {
+  margin: 0.8rem 0;
+  padding: 0.7rem 0.9rem;
+  border-left: 3px solid var(--sea);
+  background: rgba(31, 93, 107, 0.05);
+  line-height: 1.6;
+}
+.jobs__heading {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 1.2rem 0 0.4rem;
+}
+.job {
+  padding: 0.9rem 0 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.job--current {
+  opacity: 0.75;
+}
+.job__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: baseline;
+}
+.job__pay {
+  margin: 0.3rem 0;
+  font-size: 1.05rem;
+}
+.job__costs {
+  list-style: none;
+  margin: 0.4rem 0;
+  padding: 0;
+}
+.job__costs li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.15rem 0;
+  font-size: 0.92rem;
+}
+.job__net {
+  border-top: 1px solid var(--line);
+  margin-top: 0.3rem;
+  padding-top: 0.4rem !important;
+}
+.job__detail {
+  margin: 0.2rem 0;
+  line-height: 1.5;
+  font-size: 0.92rem;
+}
+.job__foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.7rem;
+}
+.job__badge {
+  font-size: 0.8rem;
+  color: var(--muted);
+}

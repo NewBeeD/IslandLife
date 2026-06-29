@@ -88,6 +88,16 @@ export {
   refreshWageRates,
 } from './wages';
 export {
+  surfaceJobs,
+  takeJob,
+  jobMonthlyGross,
+  jobNetPerMonth,
+  attachedCostsTotal,
+  JobError,
+  JOB_VENTURE_ID,
+} from './jobs';
+export type { TakeJobResult } from './jobs';
+export {
   resaleQuote,
   sellAssetNow,
   listAssetForSale,

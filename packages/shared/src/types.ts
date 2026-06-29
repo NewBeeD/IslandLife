@@ -214,6 +214,58 @@ export interface WageProfile {
   hoursPerDay: number; // ~8
 }
 
+// ── Jobs & the job market (Phase 16) ─────────────────────────────────────────
+// A real job market the player can browse and choose from. A `JobPosting` is a
+// position an employer is hiring for — varying pay, attached expenses (the cost of
+// getting to work and feeding yourself there), qualification/experience
+// requirements, and a window that comes and goes like an opportunity. The player
+// weighs each job's pay against its costs and switches trades by taking a new job.
+// Postings live on `world.jobPostings` and serialize with the snapshot; a player
+// with no job market is byte-identical (the list defaults to empty — the digest
+// holds). Pay/cost figures are public offer information (a job ad), like an asset's
+// asking price — they are shown to the player, but the hidden gating thresholds are
+// never projected raw (the player reads requirements as prose).
+export interface JobCosts {
+  transport: number; // EC$/month getting to and from work
+  food: number; // EC$/month feeding yourself on the job
+  other?: number; // EC$/month any other attached cost (tools, dues)
+}
+
+// How a job pays. WAGE is a day rate (a fixed monthly take of dailyRate × workdays —
+// a steady position, not the skill-tracking self-employed day-rate of Phase 15).
+// SALARY is a flat monthly figure.
+export type JobWageKind = 'WAGE' | 'SALARY';
+export type JobStability = 'STEADY' | 'SEASONAL' | 'CASUAL';
+export type JobPostingStatus = 'OPEN' | 'TAKEN' | 'EXPIRED';
+
+export interface JobPosting {
+  id: string; // unique per surfaced posting
+  specId: string; // the catalogue identity, for dedup/hygiene (not projected)
+  title: string; // player-facing: "general labourer with a Roseau contractor"
+  industry: Industry;
+  wageKind: JobWageKind;
+  dailyRate?: number; // WAGE — EC$/day (× workdays = the monthly take)
+  monthlySalary?: number; // SALARY — EC$/month
+  attachedCosts: JobCosts;
+  minCredential?: CredentialLevel; // hidden gate — surfaced only when the player meets it
+  minExperience?: number; // hidden gate (domain experience 0–1)
+  stability: JobStability; // shown as prose, never as a number
+  surfacedMonth: number;
+  windowMonths: number; // months the posting stays open before it lapses
+  status: JobPostingStatus;
+}
+
+// The job the player currently holds (Phase 16). Recorded so the Money view can show
+// the position's attached costs itemized (transport/food) net of the gross pay, and
+// so taking a new job replaces the old one. Only the player holds a job, so this is
+// undefined for NPCs and for a self-employed player (the digest holds).
+export interface TakenJob {
+  postingId: string;
+  title: string;
+  industry: Industry;
+  attachedCosts: JobCosts;
+}
+
 // ── Ventures (Phase 8: the income spine) ─────────────────────────────────────
 // A concurrent income stream the player runs — a fishing boat, a minibus route, a
 // roadside juice stand — each with its own assets, output, operating cost, and
@@ -350,6 +402,12 @@ export interface NPCAgent {
   // monthly from skill. Undefined for NPCs and non-wage players (the digest holds).
   // Once the player runs a venture portfolio, the wage moves onto its "venture 0".
   wageProfile?: WageProfile;
+
+  // ── Phase 16: the job the player currently holds ────────────────────────────
+  // Optional. Set when the player takes a posting from the job market; carries the
+  // position's attached costs so the Money view shows pay net of transport/food.
+  // Undefined for NPCs and a self-employed player (the digest holds).
+  currentJob?: TakenJob;
 }
 
 export interface ActivePolicy {
@@ -625,6 +683,9 @@ export interface WorldState {
   // Opportunities surfaced to the player and the decisions they present (Phase 6).
   opportunities: Opportunity[];
   decisions: PlayerDecision[];
+  // The job market — postings the player can browse and take (Phase 16). Defaults
+  // to empty; a player with no job market is byte-identical (the digest holds).
+  jobPostings: JobPosting[];
   // Seeded PRNG is attached at runtime by the engine (not serialized here).
   rng: RNG;
 }

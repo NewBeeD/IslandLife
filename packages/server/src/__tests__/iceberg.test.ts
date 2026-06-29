@@ -23,6 +23,7 @@ import {
   toDecisionDTO,
   toFeedDTO,
   toFinancingQuoteDTO,
+  toJobsDTO,
   toMoneyDTO,
   toOpportunitiesDTO,
   toSkillsDTO,
@@ -134,6 +135,9 @@ describe('iceberg-leak contract (P-X1)', () => {
         assertNoLeak('opportunities', toOpportunitiesDTO(world));
         // The skills view is qualitative prose — no raw skill/capital scores (S3).
         assertNoLeak('skills', toSkillsDTO(world));
+        // The job market: pay/net are the player's own prospective money, but the
+        // hidden gates/stability never cross the wire as numbers (Phase 16).
+        assertNoLeak('jobs', toJobsDTO(world));
       }
     });
   }
@@ -291,6 +295,25 @@ describe('iceberg-leak contract (P-X1)', () => {
     expect(skills.wage?.dailyRate).toBe(118);
     expect(skills.wage?.perMonth).toBe(2360);
     assertNoLeak('skills', skills);
+  });
+
+  it('the job market projects pay/net but leaks no hidden gates (Phase 16)', () => {
+    // Populate the job market and project it: the postings carry the player's own
+    // prospective money (pay, net of attached costs) but none of the hidden gating
+    // thresholds, stability-as-numbers, or any global iceberg token.
+    const world = buildWorld(33, { population: 60, choices: CHOICES });
+    const p = world.player;
+    p.cash = 5000;
+    world.month = 3;
+    surfaceOpportunities(world); // surfaceJobs runs within, posting the slate
+    expect(world.jobPostings.some((j) => j.status === 'OPEN')).toBe(true);
+
+    const jobs = toJobsDTO(world);
+    expect(jobs.postings.length).toBeGreaterThanOrEqual(1);
+    expect(jobs.postings[0]!.grossPerMonth).toBeGreaterThan(0);
+    // The internal catalogue id must never ride on the wire.
+    expect(JSON.stringify(jobs)).not.toContain('specId');
+    assertNoLeak('jobs', jobs);
   });
 
   it('asset sale and collateral DTOs leak no hidden mechanics (Phase 12)', () => {

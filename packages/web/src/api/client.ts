@@ -9,12 +9,14 @@ import type {
   DecisionResultDTO,
   FeedDTO,
   FinancingQuoteDTO,
+  JobsDTO,
   LoanActionResultDTO,
   MoneyDTO,
   OpportunitiesDTO,
   SaleMode,
   SkillsDTO,
   StateDTO,
+  TakeJobResultDTO,
 } from '@island/shared';
 
 // Typed client for the Island Life API. Every method returns a projected DTO
@@ -73,6 +75,12 @@ export const api = {
   },
   skills(saveId: string) {
     return get<SkillsDTO>(`/saves/${saveId}/skills`);
+  },
+  jobs(saveId: string) {
+    return get<JobsDTO>(`/saves/${saveId}/jobs`);
+  },
+  takeJob(saveId: string, jobId: string) {
+    return post<TakeJobResultDTO>(`/saves/${saveId}/jobs/${jobId}/take`);
   },
   decision(saveId: string, decisionId: string) {
     return get<DecisionDTO>(`/saves/${saveId}/decisions/${decisionId}`);

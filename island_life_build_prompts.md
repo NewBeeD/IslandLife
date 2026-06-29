@@ -30,9 +30,11 @@ of work with an acceptance test, the files it touches, and its dependencies.
   (wage work grounded in a day-rate × workdays model so the per-day and per-month figures
   reconcile, a new worker starting at Dominica's calibrated base, the rate rising with
   skill / tools / credentials, independent side jobs for an experienced hand, and a
-  Skills view). **Next:** the rest of the `ideas.md` playtest backlog — **Phases 16–19**
-  (a job market, venture realism, and negotiable/always-on deals), then the original
-  post-slice backlog (P-B1 firm formation onward).
+  Skills view), and Phase 16 the job market (a browsable, come-and-go slate of postings
+  across the eight industries — varying pay, attached transport/food costs, credential /
+  experience gates, taken net-of-expenses, with a Jobs view). **Next:** the rest of the
+  `ideas.md` playtest backlog — **Phases 17–19** (venture realism, and negotiable/always-on
+  deals), then the original post-slice backlog (P-B1 firm formation onward).
 
 ## How to read this
 
@@ -959,7 +961,7 @@ These are the guardrails I follow on every change; they're not steps, they're co
   `NPCAgent`/`Venture`; `SIDE_JOB` opportunity kind + `SideJobSpec`; `SkillsDTO`;
   6 tests in `wages.test.ts` + a Phase-15 case in the iceberg contract.
 
-## Phase 16 — Jobs & the job market (feature) 🟡
+## Phase 16 — Jobs & the job market (feature) ✅ DONE
 
 > Goal: a real **job market** the player can browse and choose from — jobs with varying
 > pay, **attached expenses** (transport, food), **qualification + experience
@@ -996,8 +998,40 @@ These are the guardrails I follow on every change; they're not steps, they're co
   *Acceptance:* the player browses available jobs, sees pay vs expenses vs
   requirements, and picks one; voice validator passes.
 
-- *Phase acceptance:* `typecheck` ×2 + `npm test` green; a job market opens and closes,
-  the player compares net pay across postings and switches jobs; digest change noted.
+- *Phase acceptance:* ✅ `npm run typecheck && npm run typecheck:web && npm test` green
+  (195 tests; +11 for Phase 16 — 9 in `engine/__tests__/jobs.test.ts`, 2 in
+  `server/__tests__/jobMarket.test.ts`, plus a Phase-16 case in the iceberg contract).
+  A real job market now opens and closes alongside the opportunity channels: a new
+  `engine/jobs.ts` (pure, S1) with a `JobPosting` model (`{ id, specId, title, industry,
+  wageKind, dailyRate/monthlySalary, attachedCosts, minCredential, minExperience,
+  stability, surfacedMonth, windowMonths, status }`), an eight-industry catalogue of
+  WAGE day-rate and SALARY positions, and `surfaceJobs(world)` — a rotating slate (target
+  ~4 open) gated by the player's credentials/experience, drawn from `world.rng`, with
+  windows that lapse and a re-offer cooldown + bounded prune reusing the Phase-13 hygiene
+  so postings never duplicate (P16.1/P16.2). `surfaceJobs` is wired in at the end of
+  `surfaceOpportunities` (so it draws rng *after* the existing surfacers, leaving their
+  outcomes unchanged) and runs only on the server advance path, so — like every surfacer —
+  it never touches `simulateOneMonth` or the golden master, and the determinism digest is
+  **unchanged** (the no-market player carries an empty `jobPostings`, byte-identical — S2,
+  P16.1). Taking a posting (`takeJob`) switches the player into the position, books its
+  attached costs as a monthly operating line, and records it as `player.currentJob`; income
+  is the fixed monthly gross (steady employment, distinct from Phase 15's skill-tracking
+  self-employed day rate), routed through the single-stream STANDING fields or a replaceable
+  `VEN_JOB` venture when a portfolio runs (P16.3). The Money view shows the wage with the
+  attached costs **itemized** (getting to work, food on the job) so the take-home reads as
+  net pay — and a higher-gross far job can net **less** than a closer lower-gross one,
+  exactly the trade-off the player weighs. A `GET /saves/:id/jobs` projection + a web
+  **Jobs** tab list the open slate (pay, net-of-cost, requirements + stability as prose,
+  most net-rewarding first) with the held job called out; `POST /saves/:id/jobs/:jobId/take`
+  takes one and returns an in-voice acknowledgement (P16.4). The iceberg contract snapshots
+  the jobs DTO too: the EC$ pay/net are the player's own prospective money (shown like the
+  money view), but the hidden gates, `specId`, and stability never cross the wire as numbers
+  (S3) — still green. New `JobPosting`/`JobCosts`/`TakenJob` + `jobPostings` on `WorldState`
+  and `currentJob` on `NPCAgent` (serialized, with empty-default backfill); `JobsDTO`/
+  `JobPostingDTO`/`TakeJobResultDTO`; `engine/jobs.ts`
+  (`surfaceJobs`/`takeJob`/`jobMonthlyGross`/`jobNetPerMonth`/`attachedCostsTotal`/
+  `JobError`/`JOB_VENTURE_ID`); `server/projection/jobs.ts`; `buildJobTakenAcknowledgement`
+  in `narrative/decisions.ts`; `web/views/Jobs.tsx` + the App tab + client methods.
 
 ## Phase 17 — Venture realism: commitment, upgrades, shared assets, risk & exit 🟡
 

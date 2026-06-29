@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import {
   DecisionError,
+  JobError,
   LoanError,
   SaleError,
   applyUpgradeFinancing,
@@ -17,11 +18,13 @@ import {
   setLoanInstallment,
   simulateOneMonth,
   surfaceOpportunities,
+  takeJob,
   updatePlayerIncome,
   type CreationChoices,
 } from '@island/engine';
 import {
   buildDecisionAcknowledgement,
+  buildJobTakenAcknowledgement,
   captureTriggerSnapshot,
   detectTriggers,
   generateConsequenceEntry,
@@ -53,11 +56,13 @@ import {
   toDecisionDTO,
   toFeedDTO,
   toFinancingQuoteDTO,
+  toJobsDTO,
   toLoanActionResultDTO,
   toMoneyDTO,
   toOpportunitiesDTO,
   toSkillsDTO,
   toStateDTO,
+  toTakeJobResultDTO,
 } from './projection';
 
 interface CreateSaveBody {
@@ -168,6 +173,36 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
     if (!loaded) return;
     return toSkillsDTO(loaded.world);
   });
+
+  // GET /saves/:id/jobs — the job market: the open slate of postings the player can
+  // browse, with pay, net-of-cost, and requirements as prose (Phase 16).
+  app.get<{ Params: { id: string } }>('/saves/:id/jobs', async (req, reply) => {
+    const loaded = await loadOr404(req.params.id, reply);
+    if (!loaded) return;
+    return toJobsDTO(loaded.world);
+  });
+
+  // POST /saves/:id/jobs/:jobId/take — take a posting from the market (Phase 16).
+  // Switches the player into the position, books its attached costs, persists.
+  app.post<{ Params: { id: string; jobId: string } }>(
+    '/saves/:id/jobs/:jobId/take',
+    async (req, reply) => {
+      const loaded = await loadOr404(req.params.id, reply);
+      if (!loaded) return;
+      const { world } = loaded;
+      try {
+        const result = takeJob(world, req.params.jobId);
+        const acknowledgement = buildJobTakenAcknowledgement(world, result.taken);
+        await saveTick(req.params.id, world);
+        return toTakeJobResultDTO(result, acknowledgement);
+      } catch (err) {
+        if (err instanceof JobError) {
+          return reply.code(err.code === 'NOT_FOUND' ? 404 : 409).send({ error: err.message });
+        }
+        throw err;
+      }
+    },
+  );
 
   // GET /saves/:id/community — relationships + reputation as prose.
   app.get<{ Params: { id: string } }>('/saves/:id/community', async (req, reply) => {

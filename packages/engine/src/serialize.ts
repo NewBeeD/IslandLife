@@ -4,6 +4,7 @@ import type {
   Country,
   Good,
   Government,
+  JobPosting,
   LegacyScore,
   Market,
   NPCAgent,
@@ -48,6 +49,7 @@ export interface SerializedWorld {
   playerNotifications: string[];
   opportunities: Opportunity[];
   decisions: PlayerDecision[];
+  jobPostings: JobPosting[];
 }
 
 const clone = <T>(x: T): T => structuredClone(x);
@@ -81,6 +83,7 @@ export function serializeWorld(world: WorldState): SerializedWorld {
     playerNotifications: clone(world.playerNotifications),
     opportunities: clone(world.opportunities),
     decisions: clone(world.decisions),
+    jobPostings: clone(world.jobPostings),
   };
 }
 
@@ -136,6 +139,8 @@ export function deserializeWorld(s: SerializedWorld): WorldState {
     // Default for snapshots written before Phase 6 added these fields.
     opportunities: s.opportunities ? clone(s.opportunities) : [],
     decisions: s.decisions ? clone(s.decisions) : [],
+    // Phase 16: default for snapshots written before the job market existed.
+    jobPostings: s.jobPostings ? clone(s.jobPostings) : [],
     rng: createRng(s.seed, s.rngState),
   };
 }

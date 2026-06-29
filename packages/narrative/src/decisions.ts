@@ -4,6 +4,7 @@ import type {
   NarrativeEntry,
   Opportunity,
   PlayerDecision,
+  TakenJob,
   WorldState,
 } from '@island/shared';
 import { formatCurrency } from './magnitude';
@@ -307,6 +308,19 @@ function buildEducationAcknowledgement(world: WorldState, decision: PlayerDecisi
   return (
     `You sign the forms and pay the first of it. ${capitalise(name)} is yours to see through ` +
     `now — the evenings will be long, but you have started.`
+  );
+}
+
+// The acknowledgement after taking a job from the market (Phase 16): the player has
+// signed on, and the work — and the costs of getting to it — are part of the month
+// now. No outcome, no judgement; a plain in-voice line. Not a PlayerDecision, so this
+// takes the taken job directly.
+export function buildJobTakenAcknowledgement(world: WorldState, taken: TakenJob): string {
+  const place = parishName(world);
+  return (
+    `It is settled — you start with ${taken.title}. Steady work and a wage you can count on, ` +
+    `set against the road to it and the rest. Around ${place} a man is known by where he turns ` +
+    `up of a morning. From here, this is yours.`
   );
 }
 

@@ -1,5 +1,6 @@
 import { GOODS, REPRESENTATIVE_GOOD, gameDateLabel } from '@island/shared';
 import {
+  JOB_VENTURE_ID,
   activeVentures,
   friendBackerId,
   hasVentures,
@@ -135,14 +136,27 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
   const expenseLines: MoneyLine[] = [{ label: 'Food and household', amount: Math.round(p.monthlyLivingCosts) }];
   const dayToDay = Math.round(spending - p.monthlyLivingCosts);
   if (dayToDay >= 1) expenseLines.push({ label: 'Day-to-day spending', amount: dayToDay });
+  // Phase 16: a job's attached costs (transport, food) are shown itemized below, so
+  // skip the generic operating line that would otherwise represent them — the job
+  // venture's line (portfolio) or the single-stream operating costs (the job's costs).
+  const job = p.currentJob;
   if (portfolio) {
     for (const v of activeVentures(p)) {
+      if (job && v.id === JOB_VENTURE_ID) continue; // shown as itemized job costs below
       if (v.monthlyOperatingCosts >= 1) {
         expenseLines.push({ label: `Fuel and upkeep (${v.label})`, amount: Math.round(v.monthlyOperatingCosts) });
       }
     }
-  } else if (operatingCosts >= 1) {
+  } else if (!job && operatingCosts >= 1) {
     expenseLines.push({ label: 'Fuel and upkeep', amount: Math.round(operatingCosts) });
+  }
+  // The current job's attached costs, itemized (Phase 16) — so the player reads their
+  // pay net of getting to work and eating there.
+  if (job) {
+    const c = job.attachedCosts;
+    if (c.transport >= 1) expenseLines.push({ label: 'Getting to work', amount: Math.round(c.transport) });
+    if (c.food >= 1) expenseLines.push({ label: 'Food on the job', amount: Math.round(c.food) });
+    if (c.other != null && c.other >= 1) expenseLines.push({ label: 'Other work costs', amount: Math.round(c.other) });
   }
   // Tuition while enrolled (Phase 9) — a real monthly line until the program ends.
   const enrolled = p.education?.enrolled;
