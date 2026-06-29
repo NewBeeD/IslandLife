@@ -107,16 +107,33 @@ export function valuateCandidate(
   return total;
 }
 
-// Score every candidate and return them sorted best-first. Ties keep their input
+// Apply a soft preference multiplier to a prospect score in a sign-aware way, so a
+// multiplier above 1 ("the agent favours this action") raises the score whether the
+// action's value is currently a gain (scale it up) or a loss (shrink the loss toward
+// zero — the agent is more willing to accept the downside). A multiplier of exactly 1
+// (the default) leaves the score untouched, so the pure-P19.1 path is unchanged.
+function applyBias(value: number, multiplier: number): number {
+  if (multiplier === 1) return value;
+  return value >= 0 ? value * multiplier : value / multiplier;
+}
+
+// Score every candidate and return them sorted best-first. An optional `bias`
+// supplies a per-candidate preference multiplier (P19.2 archetypes) folded over the
+// prospect score; omit it for the pure rational valuation. Ties keep their input
 // order (the `index` tiebreak makes the sort stable across engines), so the choice
 // is fully deterministic — two equal options resolve to whichever the caller listed
 // first.
 export function evaluateOptions<M>(
   agent: Pick<NPCAgent, 'lossAversion' | 'riskTolerance' | 'patience'>,
   candidates: ActionCandidate<M>[],
+  bias?: (candidate: ActionCandidate<M>) => number,
 ): ScoredCandidate<M>[] {
   return candidates
-    .map((candidate, index) => ({ candidate, value: valuateCandidate(agent, candidate), index }))
+    .map((candidate, index) => ({
+      candidate,
+      value: applyBias(valuateCandidate(agent, candidate), bias ? bias(candidate) : 1),
+      index,
+    }))
     .sort((a, b) => b.value - a.value || a.index - b.index)
     .map(({ candidate, value }) => ({ candidate, value }));
 }
@@ -125,6 +142,7 @@ export function evaluateOptions<M>(
 export function chooseBest<M>(
   agent: Pick<NPCAgent, 'lossAversion' | 'riskTolerance' | 'patience'>,
   candidates: ActionCandidate<M>[],
+  bias?: (candidate: ActionCandidate<M>) => number,
 ): ActionCandidate<M> | undefined {
-  return evaluateOptions(agent, candidates)[0]?.candidate;
+  return evaluateOptions(agent, candidates, bias)[0]?.candidate;
 }

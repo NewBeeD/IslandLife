@@ -80,6 +80,9 @@ const GLOBAL_TOKENS = [
   // NPC decision internals
   'prospectUtility',
   'Utility',
+  // personality archetypes (A23) — inferable from behaviour, never a projected label
+  'archetype',
+  'strategyBias',
   // legacy (hidden until death)
   'legacyScore',
   'wealthScore',

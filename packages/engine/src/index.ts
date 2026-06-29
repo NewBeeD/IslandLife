@@ -35,8 +35,19 @@ export {
   discountRate,
   weightProbability,
   discountFactor,
+  ARCHETYPES,
+  archetypeAffinities,
+  dominantArchetype,
+  archetypeBias,
 } from './decision';
-export type { Outcome, ActionCandidate, ScoredCandidate } from './decision';
+export type {
+  Outcome,
+  ActionCandidate,
+  ScoredCandidate,
+  Archetype,
+  ActionTag,
+  ArchetypeTraits,
+} from './decision';
 export {
   surfaceOpportunities,
   resolveDecision,

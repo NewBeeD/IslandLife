@@ -1,6 +1,6 @@
 import { INDUSTRIES } from '@island/shared';
 import type { Industry, NPCAgent, WorldState } from '@island/shared';
-import { chooseBest, type ActionCandidate } from './decision';
+import { archetypeBias, chooseBest, type ActionCandidate } from './decision';
 
 export type Action = { type: 'SEEK_EMPLOYMENT' } | { type: 'SAVE' };
 
@@ -38,12 +38,18 @@ function candidateActions(agent: NPCAgent, world: WorldState): ActionCandidate<A
 }
 
 // The living NPC decision: score the available actions with the prospect-theory
-// engine and take the best (Kahneman & Tversky, P19.1). Today the unemployed look
-// for work and everyone else holds — the same outcome as the old stub — but now the
-// judgement is trait-driven (lossAversion/riskTolerance/patience) and ready to weigh
-// the richer actions later prompts add.
+// engine (Kahneman & Tversky, P19.1), tilted by the agent's soft personality
+// archetype (A23, P19.2), and take the best. Today the unemployed look for work and
+// everyone else holds — the same outcome as the old stub, since the archetype tilt
+// is a positive multiplier and SEEK (a pure gain) still beats SAVE (zero) — but the
+// judgement is now trait- and character-driven, ready to weigh the richer actions
+// later prompts add (where a predator will lean into expansion, a conservative into
+// holding).
 export function npcDecide(agent: NPCAgent, world: WorldState): Action {
-  return chooseBest(agent, candidateActions(agent, world))?.meta ?? { type: 'SAVE' };
+  const best = chooseBest(agent, candidateActions(agent, world), (c) =>
+    archetypeBias(agent, c.type),
+  );
+  return best?.meta ?? { type: 'SAVE' };
 }
 
 export function applyAction(agent: NPCAgent, action: Action, world: WorldState): void {
