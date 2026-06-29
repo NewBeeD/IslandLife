@@ -1,5 +1,6 @@
-import type { NPCAgent } from '@island/shared';
+import type { ActionTag, NPCAgent } from '@island/shared';
 import { clamp } from '../rng';
+import { tagOf } from './tags';
 
 // ── Personality archetypes (A23) ─────────────────────────────────────────────
 // Each NPC has a *standing strategy* — the kind of operator they tend to be —
@@ -28,35 +29,6 @@ export const ARCHETYPES: readonly Archetype[] = [
   'BRAND_BUILDER',
   'PREDATOR',
 ];
-
-// The strategic flavour of an action. The live actions today are EARN/HOLD; the
-// rest are the vocabulary P19.5 (firm formation/exit) and Phase 20 (competition)
-// will speak, wired here ahead of time so archetypes shape them the moment they land.
-export type ActionTag =
-  | 'EARN'
-  | 'HOLD'
-  | 'EXPAND'
-  | 'BORROW'
-  | 'INNOVATE'
-  | 'COMPETE'
-  | 'CUT_COST'
-  | 'EXIT'
-  | 'BRAND';
-
-// Map an action candidate's `type` to its strategic tag. Unknown types are neutral.
-const TAG_BY_ACTION: Record<string, ActionTag> = {
-  SEEK_EMPLOYMENT: 'EARN',
-  SAVE: 'HOLD',
-  START_BUSINESS: 'EXPAND',
-  EXPAND: 'EXPAND',
-  BORROW: 'BORROW',
-  EXIT: 'EXIT',
-  COMPETE: 'COMPETE',
-  CUT_PRICE: 'COMPETE',
-  INNOVATE: 'INNOVATE',
-  BRAND: 'BRAND',
-  CUT_COST: 'CUT_COST',
-};
 
 // Each archetype's taste for each tag, in [-1, 1] (0 = indifferent). A predator
 // loves to compete and expand and hates to sit still; a conservative is the mirror.
@@ -122,7 +94,7 @@ export function dominantArchetype(agent: ArchetypeTraits): Archetype {
 // ≈1 for a neutral fit, up to ~1.4 for an action the character loves, down to ~0.6
 // for one it shuns. Applied over the P19.1 prospect score in the decision step.
 export function archetypeBias(agent: ArchetypeTraits, actionType: string): number {
-  const tag = TAG_BY_ACTION[actionType];
+  const tag = tagOf(actionType);
   if (!tag) return 1;
   const aff = archetypeAffinities(agent);
   let raw = 0;

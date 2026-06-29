@@ -342,6 +342,32 @@ export interface Venture {
   wageProfile?: WageProfile;
 }
 
+// ── NPC decision tags & observation memory (Phase 19) ────────────────────────
+// The strategic flavour of an action the decision engine reasons about (P19.2) and
+// remembers having seen (P19.3). Lives in shared so the engine and the
+// (de)serializer agree on the shape of an agent's memory.
+export type ActionTag =
+  | 'EARN'
+  | 'HOLD'
+  | 'EXPAND'
+  | 'BORROW'
+  | 'INNOVATE'
+  | 'COMPETE'
+  | 'CUT_COST'
+  | 'EXIT'
+  | 'BRAND';
+
+// One remembered move in an agent's bounded observation ring (P19.3, C10/A15): the
+// kind of move (its tag), how it turned out for the relevant party (outcome, −1 bad
+// … +1 good), and when it was seen (for recency decay). Own experience and watched
+// competitors both land here; the agent learns to repeat what pays and drop what
+// keeps losing. Hidden state — never crosses the wire (S3).
+export interface AgentObservation {
+  tag: ActionTag;
+  outcome: number; // −1 … +1
+  month: number;
+}
+
 export interface NPCAgent {
   id: string;
   name: string;
@@ -457,6 +483,14 @@ export interface NPCAgent {
   // revenue share). Each pays a monthly inflow tied to the NPC venture's fortunes.
   // Undefined for NPCs and a player who has never invested (the digest holds).
   investments?: PlayerInvestment[];
+
+  // ── Phase 19: bounded observation memory (C10/A15) ──────────────────────────
+  // A fixed-size ring of recently observed moves — the agent's own and watched
+  // competitors' — that the decision engine aggregates into a learned tilt: an agent
+  // who keeps losing on price stops competing on price and differentiates, and
+  // competitors copy a winning move. Optional/undefined === no memory yet, so NPCs
+  // and a pre-Phase-19 player are byte-identical (the digest holds).
+  observations?: AgentObservation[];
 }
 
 export interface ActivePolicy {

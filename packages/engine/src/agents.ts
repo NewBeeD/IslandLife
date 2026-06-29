@@ -1,6 +1,6 @@
 import { INDUSTRIES } from '@island/shared';
 import type { Industry, NPCAgent, WorldState } from '@island/shared';
-import { archetypeBias, chooseBest, type ActionCandidate } from './decision';
+import { archetypeBias, chooseBest, learnedBias, type ActionCandidate } from './decision';
 
 export type Action = { type: 'SEEK_EMPLOYMENT' } | { type: 'SAVE' };
 
@@ -39,15 +39,18 @@ function candidateActions(agent: NPCAgent, world: WorldState): ActionCandidate<A
 
 // The living NPC decision: score the available actions with the prospect-theory
 // engine (Kahneman & Tversky, P19.1), tilted by the agent's soft personality
-// archetype (A23, P19.2), and take the best. Today the unemployed look for work and
-// everyone else holds — the same outcome as the old stub, since the archetype tilt
-// is a positive multiplier and SEEK (a pure gain) still beats SAVE (zero) — but the
-// judgement is now trait- and character-driven, ready to weigh the richer actions
-// later prompts add (where a predator will lean into expansion, a conservative into
-// holding).
+// archetype (A23, P19.2) and what their recent memory has taught them (C10/A15,
+// P19.3), and take the best. Today the unemployed look for work and everyone else
+// holds — the same outcome as the old stub, since both tilts are positive multipliers
+// and SEEK (a pure gain) still beats SAVE (zero), and a fresh agent has no memory —
+// but the judgement is now trait-, character-, and experience-driven, ready to weigh
+// the richer actions later prompts add (where a predator leans into expansion, a
+// conservative into holding, and an agent burned on price differentiates instead).
 export function npcDecide(agent: NPCAgent, world: WorldState): Action {
-  const best = chooseBest(agent, candidateActions(agent, world), (c) =>
-    archetypeBias(agent, c.type),
+  const best = chooseBest(
+    agent,
+    candidateActions(agent, world),
+    (c) => archetypeBias(agent, c.type) * learnedBias(agent, c.type, world.month),
   );
   return best?.meta ?? { type: 'SAVE' };
 }

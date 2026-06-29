@@ -15,4 +15,7 @@ export {
   dominantArchetype,
   archetypeBias,
 } from './archetype';
-export type { Archetype, ActionTag, ArchetypeTraits } from './archetype';
+export type { Archetype, ArchetypeTraits } from './archetype';
+export type { ActionTag } from '@island/shared';
+export { tagOf } from './tags';
+export { recordObservation, learnedBias, MEMORY_CAPACITY } from './memory';

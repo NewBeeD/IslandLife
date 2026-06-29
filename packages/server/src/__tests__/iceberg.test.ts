@@ -83,6 +83,8 @@ const GLOBAL_TOKENS = [
   // personality archetypes (A23) — inferable from behaviour, never a projected label
   'archetype',
   'strategyBias',
+  // observation memory (C10/A15) — the agent's hidden learning, never on the wire
+  'observations',
   // legacy (hidden until death)
   'legacyScore',
   'wealthScore',

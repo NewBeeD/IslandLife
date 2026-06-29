@@ -39,6 +39,10 @@ export {
   archetypeAffinities,
   dominantArchetype,
   archetypeBias,
+  tagOf,
+  recordObservation,
+  learnedBias,
+  MEMORY_CAPACITY,
 } from './decision';
 export type {
   Outcome,

@@ -31,7 +31,10 @@ export interface SerializedCompany extends Omit<Company, 'employees'> {
 }
 
 export interface SerializedWorld {
-  schemaVersion: 1;
+  // v2 (Phase 19): agents gained an optional `observations` ring. The field is
+  // additive — a v1 snapshot simply has no memory, which deserializes to an empty
+  // ring — so the migration path is implicit (P-X4).
+  schemaVersion: 2;
   seed: number;
   month: number;
   rngState: RngState;
@@ -65,7 +68,7 @@ export function serializeWorld(world: WorldState): SerializedWorld {
   });
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     seed: world.seed,
     month: world.month,
     rngState: world.rng.serialize(),
