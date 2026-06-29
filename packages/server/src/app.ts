@@ -4,27 +4,33 @@ import {
   JobError,
   LoanError,
   SaleError,
+  VentureError,
   applyUpgradeFinancing,
   borrowAgainstAsset,
   detectDueConsequences,
   detectEducationCompletions,
+  discontinueVenture,
   findBorrowerAsset,
   listAssetForSale,
   quoteCollateralLoan,
   quoteUpgradeFinancing,
+  reopenVenture,
   repayLoan,
   resolveDecision,
   sellAssetNow,
   setLoanInstallment,
+  shelveVenture,
   simulateOneMonth,
   surfaceOpportunities,
   takeJob,
   updatePlayerIncome,
   type CreationChoices,
+  type VentureCommitment,
 } from '@island/engine';
 import {
   buildDecisionAcknowledgement,
   buildJobTakenAcknowledgement,
+  buildVentureExitAcknowledgement,
   captureTriggerSnapshot,
   detectTriggers,
   generateConsequenceEntry,
@@ -63,6 +69,7 @@ import {
   toSkillsDTO,
   toStateDTO,
   toTakeJobResultDTO,
+  toVentureActionResultDTO,
 } from './projection';
 
 interface CreateSaveBody {
@@ -265,7 +272,10 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
   // takes the down payment, books the approved loan, buys the asset, and persists.
   app.post<{
     Params: { id: string; did: string };
-    Body: { optionId?: string; financing?: { downPayment?: number; termMonths?: number } };
+    Body: {
+      optionId?: string;
+      financing?: { downPayment?: number; termMonths?: number; commitment?: VentureCommitment };
+    };
   }>('/saves/:id/decisions/:did', async (req, reply) => {
     const loaded = await loadOr404(req.params.id, reply);
     if (!loaded) return;
@@ -280,7 +290,11 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
         if (!Number.isFinite(downPayment) || !Number.isFinite(termMonths) || termMonths <= 0) {
           return reply.code(400).send({ error: 'financing requires downPayment and a positive termMonths' });
         }
-        decision = applyUpgradeFinancing(world, req.params.did, downPayment, termMonths).decision;
+        // Phase 17 (P17.1): a hands-on new venture may carry a time-commitment choice
+        // (hire an operator, or switch out of an existing venture).
+        decision = applyUpgradeFinancing(
+          world, req.params.did, downPayment, termMonths, financing.commitment,
+        ).decision;
       } else {
         const optionId = req.body?.optionId;
         if (!optionId) return reply.code(400).send({ error: 'optionId or financing is required' });
@@ -445,6 +459,44 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
       } catch (err) {
         if (err instanceof LoanError) {
           return reply.code(err.code === 'NOT_FOUND' ? 404 : 400).send({ error: err.message });
+        }
+        throw err;
+      }
+    },
+  );
+
+  // POST /saves/:id/ventures/:ventureId/:action — act on one of the player's own
+  // ventures (Phase 17, P17.4): discontinue (wind down for good), shelve (pause), or
+  // reopen (un-pause). Applies the change, persists, returns the new state + a line.
+  app.post<{ Params: { id: string; ventureId: string; action: string } }>(
+    '/saves/:id/ventures/:ventureId/:action',
+    async (req, reply) => {
+      const loaded = await loadOr404(req.params.id, reply);
+      if (!loaded) return;
+      const { world } = loaded;
+      const { ventureId, action } = req.params;
+      try {
+        let venture;
+        let ack: string;
+        if (action === 'discontinue') {
+          venture = discontinueVenture(world, ventureId);
+          ack = buildVentureExitAcknowledgement('DISCONTINUE', venture.label);
+        } else if (action === 'shelve') {
+          venture = shelveVenture(world, ventureId);
+          ack = buildVentureExitAcknowledgement('SHELVE', venture.label);
+        } else if (action === 'reopen') {
+          venture = reopenVenture(world, ventureId);
+          ack = buildVentureExitAcknowledgement('REOPEN', venture.label);
+        } else {
+          return reply.code(400).send({ error: `unknown venture action ${action}` });
+        }
+        // The Money view recomputes income live from the ventures' current state, so the
+        // change shows on the next read without resampling performance here.
+        await saveTick(req.params.id, world);
+        return toVentureActionResultDTO(world, venture, ack);
+      } catch (err) {
+        if (err instanceof VentureError) {
+          return reply.code(err.code === 'NOT_FOUND' ? 404 : 409).send({ error: err.message });
         }
         throw err;
       }

@@ -1,5 +1,25 @@
-import { GOODS, REPRESENTATIVE_GOOD } from '@island/shared';
-import type { Asset, Industry, NPCAgent, ParishId, Venture, WorldState } from '@island/shared';
+import {
+  FULL_TIME_LOAD,
+  GOODS,
+  JUICE_STAND,
+  JUICE_STAND_REFERENCE_REVENUE,
+  OPERATOR_SHARE,
+  REPRESENTATIVE_GOOD,
+  SHELVED_UPKEEP_FACTOR,
+  VENTURE_PERF_CEIL,
+  VENTURE_PERF_FLOOR,
+  VENTURE_TIME_LOAD,
+} from '@island/shared';
+import type {
+  Asset,
+  BarrierTier,
+  Industry,
+  NPCAgent,
+  ParishId,
+  Venture,
+  VentureProfile,
+  WorldState,
+} from '@island/shared';
 import { clamp } from './rng';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,6 +83,8 @@ function lowBarrierSaturationFactor(world: WorldState, industry: Industry, paris
 // LOW-barrier hustle, the parish's crowding (Phase 10). A venture in a trade with no
 // representative good earns a flat base (still saturation-scaled if low-barrier).
 export function ventureGrossIncome(world: WorldState, parish: ParishId, venture: Venture): number {
+  // A shelved or wound-down venture earns nothing (Phase 17, P17.4).
+  if (venture.status !== 'ACTIVE') return 0;
   // Phase 15: a wage-work venture earns the grounded day-rate model — dailyRate ×
   // workdays — recomputed from the player's skill each advance (refreshWageRates
   // keeps the stored rate fresh). Takes precedence over spot/standing.
@@ -83,7 +105,19 @@ export function ventureGrossIncome(world: WorldState, parish: ParishId, venture:
   }
   const saturation =
     venture.barrierTier === 'LOW' ? lowBarrierSaturationFactor(world, venture.industry, parish) : 1;
-  return Math.round(venture.spotBaseIncome * venture.outputScale * factor * saturation);
+  // Phase 17 (P17.3/P17.4): the month's sampled performance multiplier — randomized
+  // sales (the juice stand) and the venture's good/bad-season swing. Stored on the
+  // venture by refreshVenturePerformance on each advance, so this read is pure and
+  // deterministic; undefined → 1 (a flat, byte-identical venture).
+  const perf = venture.performanceFactor ?? 1;
+  return Math.round(venture.spotBaseIncome * venture.outputScale * factor * saturation * perf);
+}
+
+// The share of a venture's gross the player actually banks after a hired operator's
+// cut (Phase 17, P17.1). A player-run venture keeps the whole of the player's slice;
+// one run by an operator pays the operator their share. Composes with outside equity.
+export function operatorCutShare(venture: Venture): number {
+  return venture.operatedBy === 'OPERATOR' ? venture.operatorShare ?? OPERATOR_SHARE : 0;
 }
 
 // The player's own share of a venture (Phase 11): 1 minus the outside equity. A
@@ -100,7 +134,11 @@ export function ventureIncomeLines(world: WorldState): { label: string; amount: 
   const p = world.player;
   return activeVentures(p).map((v) => ({
     label: v.label,
-    amount: Math.round(ventureGrossIncome(world, p.parish, v) * playerShareOf(v)),
+    // The player banks their equity slice of the takings, net of any hired operator's
+    // cut (Phase 17, P17.1).
+    amount: Math.round(
+      ventureGrossIncome(world, p.parish, v) * playerShareOf(v) * (1 - operatorCutShare(v)),
+    ),
   }));
 }
 
@@ -134,11 +172,43 @@ export function aggregateVentureIncome(world: WorldState): number {
   return ventureIncomeLines(world).reduce((s, l) => s + l.amount, 0);
 }
 
-// Total monthly operating costs for an agent — summed across active ventures when it
-// runs a portfolio, else the single-stream field (0 for NPCs → digest unchanged).
+// The fuel/upkeep cost of each of an agent's running (or shelved) ventures, as a
+// labelled line (Phase 17). Upkeep attributed to a physical asset (`monthlyUpkeep`)
+// is counted once even when two ventures share that asset, so one truck → one fuel
+// line, two trucks → two (P17.2, idea 15). Venture-level operating costs (a juice
+// stand's fruit & sugar, which are not tied to one asset) add on top. A shelved
+// venture pays only a fraction of its upkeep, the work having stopped (P17.4).
+export function ventureOperatingCostLines(
+  agent: NPCAgent,
+): { ventureId: string; label: string; amount: number; shelved: boolean }[] {
+  const lines: { ventureId: string; label: string; amount: number; shelved: boolean }[] = [];
+  const seenAssets = new Set<string>();
+  for (const v of agent.ventures ?? []) {
+    if (v.status === 'CLOSED') continue;
+    const factor = v.status === 'SHELVED' ? SHELVED_UPKEEP_FACTOR : 1;
+    let amount = v.monthlyOperatingCosts;
+    for (const a of v.assets) {
+      if (a.monthlyUpkeep != null && !seenAssets.has(a.id)) {
+        seenAssets.add(a.id);
+        amount += a.monthlyUpkeep;
+      }
+    }
+    lines.push({
+      ventureId: v.id,
+      label: v.label,
+      amount: Math.round(amount * factor),
+      shelved: v.status === 'SHELVED',
+    });
+  }
+  return lines;
+}
+
+// Total monthly operating costs for an agent — summed across its ventures with shared
+// assets de-duplicated (P17.2), else the single-stream field (0 for NPCs → digest
+// unchanged).
 export function totalOperatingCosts(agent: NPCAgent): number {
   if (hasVentures(agent)) {
-    return activeVentures(agent).reduce((s, v) => s + v.monthlyOperatingCosts, 0);
+    return ventureOperatingCostLines(agent).reduce((s, l) => s + l.amount, 0);
   }
   return agent.monthlyOperatingCosts ?? 0;
 }
@@ -206,9 +276,155 @@ function baseVentureFromSingleStream(p: NPCAgent): Venture | null {
       monthlyOperatingCosts: 0,
       assets: [],
       status: 'ACTIVE',
+      // Phase 17 (P17.1): a Phase 16 full-time job fills the working day. Carry that
+      // onto the base venture so a side venture forces a real time choice.
+      ...(p.currentJob ? { timeLoad: FULL_TIME_LOAD, operatedBy: 'PLAYER' as const } : {}),
     };
   }
   return null;
+}
+
+// ── Time budget & commitment (Phase 17, P17.1) ───────────────────────────────
+// A working life is one unit of time. A hands-on venture takes a slice of it; a
+// venture run by a hired operator takes none (it is passive). A full-time job fills
+// the day, so a side venture forces a real choice: stay, switch, or hire an operator.
+
+// The slice of the player's time a single venture takes right now. A hired (passive)
+// venture takes none; an untracked venture (no timeLoad) takes none either.
+export function ventureTimeLoad(v: Venture): number {
+  if (v.operatedBy === 'OPERATOR') return 0;
+  return v.timeLoad ?? 0;
+}
+
+// How much of the player's working time their active hands-on ventures take together.
+export function committedTime(agent: NPCAgent): number {
+  return activeVentures(agent).reduce((s, v) => s + ventureTimeLoad(v), 0);
+}
+
+// The working time the player has left for a new hands-on venture (0–1).
+export function freeTime(agent: NPCAgent): number {
+  return Math.max(0, FULL_TIME_LOAD - committedTime(agent));
+}
+
+// The free time the player WOULD have once a new venture is taken on — accounting for
+// a full-time job still carried on the single-stream fields (it becomes the base
+// venture only when the portfolio is materialized). Used by the decision projection so
+// the time-commitment prompt matches what applyNewVenture will enforce (P17.1).
+export function plannedFreeTime(agent: NPCAgent): number {
+  let committed = committedTime(agent);
+  if (!hasVentures(agent) && agent.currentJob) committed += FULL_TIME_LOAD;
+  return Math.max(0, FULL_TIME_LOAD - committed);
+}
+
+// The hands-on time a new venture would take, falling back to its barrier tier.
+export function ventureTimeLoadForTier(timeLoad: number | undefined, tier: BarrierTier): number {
+  return timeLoad ?? VENTURE_TIME_LOAD[tier];
+}
+
+// ── Performance fluctuation & the juice-stand model (Phase 17, P17.3/P17.4) ───
+
+// A venture's hidden success/volatility profile, drawn once at creation from its risk
+// level (P17.4). Some ventures are simply better or worse businesses (successBias),
+// and riskier trades swing harder month to month (volatility). Draws from world.rng.
+export function ventureProfileForRisk(
+  riskLevel: 'LOW' | 'MEDIUM' | 'MEDIUM_HIGH' | 'HIGH',
+  rng: WorldState['rng'],
+): VentureProfile {
+  const base: Record<typeof riskLevel, { bias: number; vol: number }> = {
+    LOW: { bias: 1.0, vol: 0.12 },
+    MEDIUM: { bias: 0.98, vol: 0.2 },
+    MEDIUM_HIGH: { bias: 0.95, vol: 0.3 },
+    HIGH: { bias: 0.92, vol: 0.4 },
+  };
+  const b = base[riskLevel];
+  // A per-venture quality draw: most cluster near the mean, a few are duds or winners.
+  const successBias = clamp(rng.gaussian(b.bias, 0.12), 0.4, 1.4);
+  return { successBias, volatility: b.vol };
+}
+
+// Sample one month's takings for a juice stand from its concrete unit economics
+// (P17.3): a bag (sometimes two) of passion fruit, a few hundred bottles each, sold
+// at the going price. Returns the performance factor (revenue vs. the reference mean)
+// and the month's fruit/sugar/transport cost. Draws from world.rng.
+function sampleJuiceStandMonth(rng: WorldState['rng']): { factor: number; operatingCost: number } {
+  const bags = rng.next() < JUICE_STAND.goodMonthChance ? 2 : 1;
+  let bottles = 0;
+  for (let i = 0; i < bags; i++) {
+    bottles += rng.int(JUICE_STAND.bottlesPerBagMin, JUICE_STAND.bottlesPerBagMax);
+  }
+  const revenue = bottles * JUICE_STAND.pricePerBottle;
+  const operatingCost = bags * (JUICE_STAND.fruitCostPerBag + JUICE_STAND.sugarTransportPerBag);
+  return { factor: revenue / JUICE_STAND_REFERENCE_REVENUE, operatingCost };
+}
+
+// Resample each active venture's performance for the new month (P17.3/P17.4). The
+// juice stand draws its concrete bag/bottle model (and its variable cost); every other
+// profiled venture draws a swing around its hidden success bias. Stored on the venture
+// so the projection reads a fresh figure without re-drawing rng. A no-op for a venture
+// with neither a production model nor a profile, so the digest holds. Draws world.rng,
+// so this runs only on the advance path (updatePlayerIncome), never in the projection.
+export function refreshVenturePerformance(world: WorldState): void {
+  for (const v of activeVentures(world.player)) {
+    if (v.production === 'JUICE_STAND') {
+      const { factor, operatingCost } = sampleJuiceStandMonth(world.rng);
+      v.performanceFactor = factor;
+      v.monthlyOperatingCosts = operatingCost;
+      continue;
+    }
+    if (v.profile) {
+      v.performanceFactor = clamp(
+        world.rng.gaussian(v.profile.successBias, v.profile.volatility),
+        VENTURE_PERF_FLOOR,
+        VENTURE_PERF_CEIL,
+      );
+    }
+  }
+}
+
+// ── Venture exit (Phase 17, P17.4) ───────────────────────────────────────────
+
+export class VentureError extends Error {
+  constructor(
+    message: string,
+    readonly code: 'NOT_FOUND' | 'BAD_STATE',
+  ) {
+    super(message);
+    this.name = 'VentureError';
+  }
+}
+
+function findPlayerVenture(world: WorldState, ventureId: string): Venture {
+  const v = (world.player.ventures ?? []).find((x) => x.id === ventureId);
+  if (!v) throw new VentureError(`venture ${ventureId} not found`, 'NOT_FOUND');
+  return v;
+}
+
+// Wind a venture down for good (P17.4): it stops earning and frees the player's time.
+// Its assets remain owned (the player can still sell them through Phase 12). Recompute
+// of monthly income happens on the next advance.
+export function discontinueVenture(world: WorldState, ventureId: string): Venture {
+  const v = findPlayerVenture(world, ventureId);
+  if (v.status === 'CLOSED') throw new VentureError('That venture is already wound down.', 'BAD_STATE');
+  v.status = 'CLOSED';
+  return v;
+}
+
+// Pause a venture (P17.4): no income while shelved, only a fraction of its upkeep, and
+// its time is freed — a way to set down a business that cannot be sold and pick it up
+// later.
+export function shelveVenture(world: WorldState, ventureId: string): Venture {
+  const v = findPlayerVenture(world, ventureId);
+  if (v.status !== 'ACTIVE') throw new VentureError('Only a running venture can be shelved.', 'BAD_STATE');
+  v.status = 'SHELVED';
+  return v;
+}
+
+// Bring a shelved venture back into operation (P17.4).
+export function reopenVenture(world: WorldState, ventureId: string): Venture {
+  const v = findPlayerVenture(world, ventureId);
+  if (v.status !== 'SHELVED') throw new VentureError('Only a shelved venture can be reopened.', 'BAD_STATE');
+  v.status = 'ACTIVE';
+  return v;
 }
 
 // Ensure the player runs an explicit venture portfolio so a newly-added venture

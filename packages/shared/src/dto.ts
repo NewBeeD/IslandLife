@@ -98,6 +98,19 @@ export interface OwnershipLine {
   holders: OwnershipShareDTO[]; // the outside holders (name + %)
 }
 
+// One of the player's ventures, as the Money view shows it (Phase 17). The player can
+// wind it down, shelve it (pause), or — if shelved — bring it back. Closed ventures
+// are not shown. No hidden mechanics (success/volatility/timeLoad) ever appear (S3) —
+// the player reads how it is doing in prose and its own money figures.
+export interface VentureLineDTO {
+  id: string; // the venture's id, so the player can act on it
+  label: string; // "the juice stand", "the minibus"
+  status: 'ACTIVE' | 'SHELVED';
+  operated: boolean; // run by a hired operator (passive income, a cut goes to them)
+  monthlyIncome: number; // EC$ the player's own net take this month (0 if shelved)
+  monthlyUpkeep: number; // EC$ fuel/upkeep this month (reduced while shelved)
+}
+
 export interface MoneyDTO {
   monthLabel: string;
   cashInHand: number;
@@ -108,6 +121,9 @@ export interface MoneyDTO {
   debts: DebtLine[];
   netWorth: number; // EC$ — cash + Σ asset value − Σ remaining principal (derived)
   notes: string[]; // contextual prose, e.g. a short-this-month warning.
+  // The player's ventures the Money view can act on (Phase 17): wind down, shelve, or
+  // reopen. Empty/absent for a single-stream player with no explicit portfolio.
+  ventures?: VentureLineDTO[];
   // Local market prices the player's SPOT ventures read (P10.5). Empty when the
   // player has no market-driven income. Optional for back-compatibility.
   marketWatch?: MarketWatchLine[];
@@ -243,6 +259,25 @@ export interface DecisionOptionDTO {
 // not chosen from a fixed option list. This describes the slider's bounds; the live
 // terms come from the quote endpoint (Phase 7). `interestRate` here is the player's
 // own prospective loan — permitted, like the money view (the scoped S3 amendment).
+// A venture the player could wind down to free the time for a new one (Phase 17,
+// P17.1 — the SWITCH choice). The hidden timeLoad never appears; just a name.
+export interface VentureSwitchOptionDTO {
+  ventureId: string;
+  label: string;
+}
+
+// The time-commitment choice attached to a hands-on new venture (Phase 17, P17.1).
+// `required` is true when the player's day is already full (a full-time job or other
+// hands-on ventures) — then they must hire an operator or step back from something
+// before they can run it themselves. No timeLoad numbers cross the wire (S3).
+export interface FinancingCommitmentDTO {
+  required: boolean;
+  timeNote: string; // prose framing the time squeeze
+  canHire: boolean; // hire an operator to run it (passive income, a cut to them)
+  operatorNote: string; // prose on the operator's cut
+  switchable: VentureSwitchOptionDTO[]; // hands-on ventures they could wind down
+}
+
 export interface FinancingControlDTO {
   assetLabel: string; // "a bigger pirogue and a new outboard engine"
   assetPrice: number; // EC$ full cost
@@ -250,6 +285,8 @@ export interface FinancingControlDTO {
   minDownPayment: number; // EC$ — usually 0
   cashOnHand: number; // EC$ — what the player has to put down
   termOptions: number[]; // selectable loan terms in months
+  // Present for a hands-on new venture that takes the player's time (Phase 17).
+  commitment?: FinancingCommitmentDTO;
 }
 
 export interface DecisionDTO {
@@ -344,6 +381,16 @@ export interface BorrowResultDTO {
   interestRate: number; // annual (the player's own loan)
   termMonths: number;
   cashInHand: number; // EC$ after the loan is paid out
+  acknowledgement: string;
+}
+
+// POST /saves/:id/ventures/:ventureId/{discontinue,shelve,reopen} — the player acting
+// on one of their own ventures (Phase 17, P17.4): wind it down for good, pause it, or
+// bring a paused one back. Returns the venture's new state and a short in-voice line.
+export interface VentureActionResultDTO {
+  ventureId: string;
+  status: 'ACTIVE' | 'CLOSED' | 'SHELVED';
+  cashInHand: number; // EC$ after the action
   acknowledgement: string;
 }
 

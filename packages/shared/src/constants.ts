@@ -17,6 +17,48 @@ export const NEW_WORKER_RATE_PREMIUM = 1.2;
 // green-hire base — a realistic ceiling so wages rise but stay grounded.
 export const WAGE_RATE_CEILING_MULTIPLIER = 2.6;
 
+// ── Venture realism (Phase 17) ───────────────────────────────────────────────
+// Time budget (P17.1). A working life is a single unit of time; a full-time job or
+// trade fills it. A hands-on side venture takes a slice of what is left — surface
+// one that would over-fill the day and the player must choose: stay, switch, or
+// hire someone to run it. A venture run by a hired operator takes none of the
+// player's own time (it is passive) but pays the operator a cut of takings.
+export const FULL_TIME_LOAD = 1; // a full-time job/trade fills the day
+export const OPERATOR_SHARE = 0.35; // a hired operator's cut of a venture's takings
+// Default hands-on time a started venture takes, by barrier tier — a cheap roadside
+// hustle still ties up real hours; a bigger operation more so.
+export const VENTURE_TIME_LOAD: Record<'LOW' | 'MEDIUM' | 'HIGH', number> = {
+  LOW: 0.5,
+  MEDIUM: 0.7,
+  HIGH: 0.85,
+};
+
+// Performance fluctuation (P17.4). Each venture carries a hidden success/volatility
+// profile; a per-month factor is sampled around it. These bound the swing so a good
+// month is a windfall and a bad one bites, but income never goes negative or wild.
+export const VENTURE_PERF_FLOOR = 0.1;
+export const VENTURE_PERF_CEIL = 1.9;
+// A shelved (paused) venture still costs something to keep — but only a fraction of
+// the running upkeep, since the work has stopped (P17.4).
+export const SHELVED_UPKEEP_FACTOR = 0.25;
+
+// The juice stand's concrete unit economics (P17.3, idea 10). A bag of passion fruit
+// yields a few hundred bottles; expenses are the fruit, sugar, and getting it to the
+// stand. Roughly a bag a month, sometimes two in a good month. Sales swing with how
+// many bottles move, sampled each month from world.rng (and thinned by crowding).
+export const JUICE_STAND = {
+  fruitCostPerBag: 150, // EC$ a bag of passion fruit
+  sugarTransportPerBag: 140, // EC$ sugar, bottles, getting to the stand
+  bottlesPerBagMin: 350,
+  bottlesPerBagMax: 500,
+  pricePerBottle: 5, // EC$
+  goodMonthChance: 0.25, // chance a month moves a second bag
+} as const;
+// The reference (mean) monthly revenue the juice stand's base income is keyed to:
+// one bag at the mid bottle yield. The sampled month scales against this.
+export const JUICE_STAND_REFERENCE_REVENUE =
+  ((JUICE_STAND.bottlesPerBagMin + JUICE_STAND.bottlesPerBagMax) / 2) * JUICE_STAND.pricePerBottle;
+
 export const COUNTRY: Country = {
   id: 'DM',
   name: 'Dominica',

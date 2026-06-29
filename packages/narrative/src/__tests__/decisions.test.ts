@@ -14,6 +14,7 @@ import type { NPCAgent, PlayerDecision, WorldState } from '@island/shared';
 import {
   buildDecisionSituation,
   buildDecisionAcknowledgement,
+  buildVentureExitAcknowledgement,
   generateConsequenceEntry,
   generateEducationCompletionEntry,
   validateNarrativeEntry,
@@ -318,4 +319,37 @@ describe('P6.4 — the delayed consequence connects back without naming the choi
       expect(entry.text.toLowerCase()).not.toContain('decision');
     });
   }
+});
+
+describe('P17.6 — venture commitment, failure & exit in voice', () => {
+  for (const action of ['DISCONTINUE', 'SHELVE', 'REOPEN'] as const) {
+    it(`a ${action} acknowledgement passes the voice validator`, () => {
+      const text = buildVentureExitAcknowledgement(action, 'the juice stand');
+      const result = validateNarrativeEntry(text);
+      expect(result.valid, result.issues.join('; ')).toBe(true);
+      expect(text.toLowerCase()).toContain('the juice stand');
+      // No raw mechanics — success/volatility/time numbers never appear in prose (S3).
+      expect(text).not.toMatch(/\d/);
+    });
+  }
+
+  it('the new-venture framing names the time trade-off and stays in voice', () => {
+    // A self-employed player offered a cross-domain hands-on venture.
+    const world = buildWorld(33, { population: 60 });
+    const p = world.player;
+    p.occupation = 'FISHING';
+    p.employmentStatus = 'SELF_EMPLOYED';
+    p.parish = 'SAINT_JOHN';
+    p.socialCapitalLocal = 0.1; // no Eunice
+    p.experience.fishing = 0.05; // below the upgrade gate
+    p.cash = 2000;
+    p.monthlyIncome = 900;
+    world.month = 4;
+    surfaceOpportunities(world);
+    const decision = world.decisions.find((d) => d.kind === 'NEW_VENTURE')!;
+    const situation = buildDecisionSituation(world, decision);
+    expect(situation.toLowerCase()).toMatch(/hours|time|run it/);
+    const result = validateNarrativeEntry(situation, 'NEW_BUSINESS');
+    expect(result.valid, result.issues.join('; ')).toBe(true);
+  });
 });

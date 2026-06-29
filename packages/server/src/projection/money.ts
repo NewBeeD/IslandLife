@@ -7,9 +7,12 @@ import {
   isFriendLoanBank,
   isWageIndustry,
   netWorthOf,
+  operatorCutShare,
   playerShareOf,
   resaleQuote,
+  ventureGrossIncome,
   ventureIncomeLines,
+  ventureOperatingCostLines,
 } from '@island/engine';
 import type {
   AssetLine,
@@ -19,6 +22,7 @@ import type {
   MoneyDTO,
   MoneyLine,
   OwnershipLine,
+  VentureLineDTO,
   WorldState,
 } from '@island/shared';
 import { INCOME_LINE_LABEL, assetLabel, bankLabel } from './labels';
@@ -141,10 +145,12 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
   // venture's line (portfolio) or the single-stream operating costs (the job's costs).
   const job = p.currentJob;
   if (portfolio) {
-    for (const v of activeVentures(p)) {
-      if (job && v.id === JOB_VENTURE_ID) continue; // shown as itemized job costs below
-      if (v.monthlyOperatingCosts >= 1) {
-        expenseLines.push({ label: `Fuel and upkeep (${v.label})`, amount: Math.round(v.monthlyOperatingCosts) });
+    // Shared assets de-duplicated, shelved ventures at reduced upkeep (Phase 17).
+    for (const l of ventureOperatingCostLines(p)) {
+      if (job && l.ventureId === JOB_VENTURE_ID) continue; // shown as itemized job costs below
+      if (l.amount >= 1) {
+        const label = l.shelved ? `Upkeep (${l.label}, shelved)` : `Fuel and upkeep (${l.label})`;
+        expenseLines.push({ label, amount: l.amount });
       }
     }
   } else if (!job && operatingCosts >= 1) {
@@ -228,6 +234,28 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
     );
   }
 
+  // The player's ventures the view can act on (Phase 17): wind down, shelve, reopen.
+  // The job venture (Phase 16 employment) is not a discretionary venture, so it is not
+  // listed here. Closed ventures drop off. No hidden mechanics — just labels & money.
+  const upkeepById = new Map(ventureOperatingCostLines(p).map((l) => [l.ventureId, l.amount]));
+  const ventures: VentureLineDTO[] = portfolio
+    ? (p.ventures ?? [])
+        .filter((v) => v.status !== 'CLOSED' && v.id !== JOB_VENTURE_ID)
+        .map((v) => ({
+          id: v.id,
+          label: v.label,
+          status: v.status === 'SHELVED' ? 'SHELVED' : 'ACTIVE',
+          operated: v.operatedBy === 'OPERATOR',
+          monthlyIncome:
+            v.status === 'ACTIVE'
+              ? Math.round(
+                  ventureGrossIncome(world, p.parish, v) * playerShareOf(v) * (1 - operatorCutShare(v)),
+                )
+              : 0,
+          monthlyUpkeep: upkeepById.get(v.id) ?? 0,
+        }))
+    : [];
+
   return {
     monthLabel: gameDateLabel(world.month),
     cashInHand: Math.round(p.cash),
@@ -238,6 +266,7 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
     debts,
     netWorth: Math.round(netWorthOf(p)),
     notes,
+    ventures,
     marketWatch: buildMarketWatch(world),
     ownership: buildOwnership(world),
   };

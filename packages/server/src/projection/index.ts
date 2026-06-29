@@ -11,6 +11,7 @@ export { toOpportunitiesDTO } from './opportunities';
 export { toSkillsDTO } from './skills';
 export { toJobsDTO, toTakeJobResultDTO } from './jobs';
 export { toDecisionDTO, toFinancingQuoteDTO } from './decisions';
+export { toVentureActionResultDTO } from './ventures';
 export {
   toAssetSaleResultDTO,
   toCollateralQuoteDTO,

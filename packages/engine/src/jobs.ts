@@ -1,4 +1,4 @@
-import { INDUSTRY_DOMAIN, WAGE_WORKDAYS_PER_MONTH, credentialRank } from '@island/shared';
+import { FULL_TIME_LOAD, INDUSTRY_DOMAIN, WAGE_WORKDAYS_PER_MONTH, credentialRank } from '@island/shared';
 import type {
   CredentialLevel,
   Industry,
@@ -259,6 +259,10 @@ export function takeJob(world: WorldState, postingId: string): TakeJobResult {
       monthlyOperatingCosts: attached,
       assets: [],
       status: 'ACTIVE',
+      // Phase 17 (P17.1): a job fills the working day, so a side venture taken on
+      // afterward forces a real time choice.
+      timeLoad: FULL_TIME_LOAD,
+      operatedBy: 'PLAYER',
     };
     p.ventures.push(venture);
     p.monthlyIncome = aggregateVentureIncome(world);

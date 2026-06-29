@@ -17,7 +17,15 @@ import type {
   SkillsDTO,
   StateDTO,
   TakeJobResultDTO,
+  VentureActionResultDTO,
 } from '@island/shared';
+
+// The time-commitment choice for a hands-on new venture (Phase 17, P17.1). Mirrors the
+// engine's VentureCommitment, kept structural so the web does not depend on @island/engine.
+export type VentureCommitmentInput =
+  | { mode: 'SOLO' }
+  | { mode: 'HIRE' }
+  | { mode: 'SWITCH'; closeVentureId: string };
 
 // Typed client for the Island Life API. Every method returns a projected DTO
 // imported straight from @island/shared — the same types the server builds, so a
@@ -94,10 +102,19 @@ export const api = {
       termMonths,
     });
   },
-  resolveFinancing(saveId: string, decisionId: string, downPayment: number, termMonths: number) {
+  resolveFinancing(
+    saveId: string,
+    decisionId: string,
+    downPayment: number,
+    termMonths: number,
+    commitment?: VentureCommitmentInput,
+  ) {
     return post<DecisionResultDTO>(`/saves/${saveId}/decisions/${decisionId}`, {
-      financing: { downPayment, termMonths },
+      financing: { downPayment, termMonths, ...(commitment ? { commitment } : {}) },
     });
+  },
+  ventureAction(saveId: string, ventureId: string, action: 'discontinue' | 'shelve' | 'reopen') {
+    return post<VentureActionResultDTO>(`/saves/${saveId}/ventures/${ventureId}/${action}`);
   },
   sellAsset(saveId: string, assetId: string, mode: SaleMode) {
     return post<AssetSaleResultDTO>(`/saves/${saveId}/assets/${assetId}/sell`, { mode });

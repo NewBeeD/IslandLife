@@ -32,9 +32,14 @@ of work with an acceptance test, the files it touches, and its dependencies.
   skill / tools / credentials, independent side jobs for an experienced hand, and a
   Skills view), and Phase 16 the job market (a browsable, come-and-go slate of postings
   across the eight industries — varying pay, attached transport/food costs, credential /
-  experience gates, taken net-of-expenses, with a Jobs view). **Next:** the rest of the
-  `ideas.md` playtest backlog — **Phases 17–19** (venture realism, and negotiable/always-on
-  deals), then the original post-slice backlog (P-B1 firm formation onward).
+  experience gates, taken net-of-expenses, with a Jobs view), and Phase 17 venture realism
+  (a hands-on venture costs time, so a full-time job forces a stay/switch/hire-an-operator
+  choice; shared-asset fuel is charged once; the juice stand earns through a concrete,
+  randomized passion-fruit model; ventures carry a hidden success/volatility profile so some
+  underperform or swing, and can be shelved/discontinued/sold; any active venture is reachable
+  for its next upgrade). **Next:** the rest of the `ideas.md` playtest backlog — **Phases
+  18–19** (negotiable/always-on deals), then the original post-slice backlog (P-B1 firm
+  formation onward).
 
 ## How to read this
 
@@ -1033,7 +1038,7 @@ These are the guardrails I follow on every change; they're not steps, they're co
   `JobError`/`JOB_VENTURE_ID`); `server/projection/jobs.ts`; `buildJobTakenAcknowledgement`
   in `narrative/decisions.ts`; `web/views/Jobs.tsx` + the App tab + client methods.
 
-## Phase 17 — Venture realism: commitment, upgrades, shared assets, risk & exit 🟡
+## Phase 17 — Venture realism: commitment, upgrades, shared assets, risk & exit ✅ DONE
 
 > Goal: ventures stop being free-stacking and frictionless. A full-time job **costs
 > time**, so a side venture forces a real choice (stay / switch / hire an operator); a
@@ -1088,9 +1093,43 @@ These are the guardrails I follow on every change; they're not steps, they're co
   `narrative/decisions.ts`. *Acceptance:* the prose passes the voice validator and
   leaks no raw success/volatility numbers (S3).
 
-- *Phase acceptance:* `typecheck` ×2 + `npm test` green; one truck → one fuel line, a
-  juice stand's takings swing realistically, a venture fails and is shelved, and a
-  hands-on side hustle forces a genuine time trade-off; digest changes noted.
+- *Phase acceptance:* ✅ `npm run typecheck && npm run typecheck:web && npm test` green
+  (210 tests; +15 for Phase 17 — 9 in `engine/__tests__/ventureRealism.test.ts`, 2 in
+  `server/__tests__/ventureProjection.test.ts`, 4 in `narrative/__tests__/decisions.test.ts`).
+  Ventures are no longer free-stacking or flat. **Time & commitment (P17.1):** a venture
+  carries a `timeLoad`, and a Phase-16 full-time job fills the working day, so taking on a
+  hands-on side venture forces a real choice — run it yourself (refused when the day is
+  full), **hire an operator** (passive income net of `OPERATOR_SHARE`, and it builds no
+  player experience), or **switch** out of an existing venture to free the time. Threaded
+  through `applyNewVenture`/`applyUpgradeFinancing` (a `VentureCommitment`), the decision
+  projection (a `FinancingCommitmentDTO` using `plannedFreeTime`), and the web financing
+  panel. **Shared-asset upkeep (P17.2):** fuel/upkeep is attributed to the physical asset
+  (`Asset.monthlyUpkeep`) and **de-duplicated** across ventures sharing it, so one truck →
+  one fuel line, two trucks → two (`ventureOperatingCostLines`/`totalOperatingCosts`).
+  **Juice-stand model (P17.3):** a concrete passion-fruit unit economic in
+  `shared/constants.ts` (a bag → 350–500 bottles at EC$5, fruit+sugar+transport cost,
+  ~1 bag/month, 2 in a good month) sampled each advance from `world.rng`, composing with
+  the Phase-10 saturation factor — deterministic per seed. **Fail/fluctuate/exit (P17.4):**
+  every started venture gets a hidden `profile` (`successBias`/`volatility`) drawn at
+  creation, and a per-month `performanceFactor` resampled on advance (`refreshVenturePerformance`
+  in `updatePlayerIncome`, stored so the projection reads it without re-drawing) — so some
+  ventures underperform or swing; the player can **discontinue** (wind down), **shelve**
+  (pause: no income, reduced upkeep), or **reopen** one, plus liquidate via the Phase-12
+  sale. **Upgrade any venture (P17.5):** `surfaceUpgrade` now iterates *every* active
+  venture's ladder (not just the first), skipping rungs on the re-offer cooldown, so an
+  established juice stand is reachable for its next stage. **Voice (P17.6):** the commitment
+  framing, the exit acknowledgements (`buildVentureExitAcknowledgement`), and the fluctuation
+  beat pass the voice validator and leak no success/volatility/time numbers (S3). Performance
+  sampling and profile draws touch `world.rng` only for a player *with* ventures and only on
+  the advance/resolve path — never `simulateOneMonth` or the golden master — so the
+  no-venture player stays byte-identical and the determinism digest holds (S2). New types:
+  `Asset.monthlyUpkeep`, `Venture.{timeLoad,operatedBy,operatorShare,production,profile,
+  performanceFactor}` + `SHELVED` status, `VentureProfile`/`VentureProduction`/
+  `VentureOperator`, `NewVentureSpec.{timeLoad,production}`; constants (`FULL_TIME_LOAD`,
+  `OPERATOR_SHARE`, `VENTURE_TIME_LOAD`, `VENTURE_PERF_FLOOR/CEIL`, `SHELVED_UPKEEP_FACTOR`,
+  `JUICE_STAND*`); `MoneyDTO.ventures` (`VentureLineDTO`), `FinancingCommitmentDTO`,
+  `VentureActionResultDTO`; `POST /saves/:id/ventures/:ventureId/{discontinue,shelve,reopen}`;
+  `web/views/Money.tsx` venture controls + the commitment radios in `Opportunities.tsx`.
 
 ## Phase 18 — Deal-making: terms, returns & always-on funding 🟢
 

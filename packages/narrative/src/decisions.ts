@@ -139,9 +139,38 @@ function buildNewVentureSituation(world: WorldState, decision: PlayerDecision): 
     `Word reaches you of ${spec.label} going — separate from what you already do, a stream of ` +
     `money running alongside the rest. The cost to get into it is ${formatCurrency(spec.entryCost)}.\n\n` +
     `${crowdLine}\n\n` +
+    `It would want hours, too — your own hands on it, or someone you trust to run it for a cut ` +
+    `of what it makes. There are only so many hours in a day, and your days are already spoken for.\n\n` +
     `You could put down what you have and borrow the rest, or let it pass and keep your hands ` +
     `on the work you know. Around ${place} a person is known by what they take on. Do you reach ` +
     `for this one?`
+  );
+}
+
+// A short, in-voice line for winding down, shelving, or reopening a venture (Phase 17,
+// P17.4). No outcome, no judgement — the plain weight of setting something down or
+// taking it up again. Passes the voice validator (second person, no raw mechanics).
+export function buildVentureExitAcknowledgement(
+  action: 'DISCONTINUE' | 'SHELVE' | 'REOPEN',
+  label: string,
+): string {
+  if (action === 'DISCONTINUE') {
+    return (
+      `You let ${label} go. There is a quiet in it, and a relief, and the small ache of a thing ` +
+      `that did not become what you hoped. The hours it took are your own again now, to put ` +
+      `where they are needed.`
+    );
+  }
+  if (action === 'SHELVE') {
+    return (
+      `You set ${label} down for now — not sold, not finished, only paused. It costs you little ` +
+      `where it stands, and the door is left open to pick it up again when the season or your ` +
+      `time turns kinder.`
+    );
+  }
+  return (
+    `You take ${label} up again. The tools come back out and the work starts where you left it. ` +
+    `It asks for your hours once more, and you have decided to give them.`
   );
 }
 

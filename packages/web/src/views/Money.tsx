@@ -31,6 +31,7 @@ export function Money({
   const delta = money.thisMonthDelta;
   const [selling, setSelling] = useState<string | null>(null);
   const [borrowAgainst, setBorrowAgainst] = useState<string | null>(null);
+  const [venturing, setVenturing] = useState<string | null>(null);
 
   const sell = async (assetId: string, mode: SaleMode) => {
     setSelling(assetId);
@@ -39,6 +40,16 @@ export function Money({
       onChanged();
     } finally {
       setSelling(null);
+    }
+  };
+
+  const ventureAct = async (ventureId: string, action: 'discontinue' | 'shelve' | 'reopen') => {
+    setVenturing(ventureId);
+    try {
+      await api.ventureAction(saveId, ventureId, action);
+      onChanged();
+    } finally {
+      setVenturing(null);
     }
   };
   return (
@@ -132,6 +143,56 @@ export function Money({
                   onCancel={() => setBorrowAgainst(null)}
                 />
               )}
+            </div>
+          ))}
+        </section>
+      )}
+
+      {money.ventures && money.ventures.length > 0 && (
+        <section className="money__section">
+          <h3>Your ventures</h3>
+          {money.ventures.map((v) => (
+            <div className="money__asset" key={v.id}>
+              <div className="money__line">
+                <span>{v.label}</span>
+                <span>
+                  {v.status === 'SHELVED' ? '—' : `${ec(v.monthlyIncome)}/mo`}
+                </span>
+                <span className="muted">
+                  {v.status === 'SHELVED'
+                    ? 'shelved'
+                    : v.operated
+                      ? 'run by someone you took on'
+                      : 'you run it'}
+                  {v.monthlyUpkeep >= 1 ? ` · upkeep ${ec(v.monthlyUpkeep)}` : ''}
+                </span>
+              </div>
+              <div className="money__sell">
+                {v.status === 'SHELVED' ? (
+                  <button
+                    type="button"
+                    disabled={venturing === v.id}
+                    onClick={() => ventureAct(v.id, 'reopen')}
+                  >
+                    Pick it back up
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={venturing === v.id}
+                    onClick={() => ventureAct(v.id, 'shelve')}
+                  >
+                    Set it down for now
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={venturing === v.id}
+                  onClick={() => ventureAct(v.id, 'discontinue')}
+                >
+                  Wind it down
+                </button>
+              </div>
             </div>
           ))}
         </section>

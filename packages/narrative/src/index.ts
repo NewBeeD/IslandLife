@@ -47,6 +47,7 @@ export {
   buildDecisionSituation,
   buildDecisionAcknowledgement,
   buildJobTakenAcknowledgement,
+  buildVentureExitAcknowledgement,
   generateConsequenceEntry,
   generateEducationCompletionEntry,
 } from './decisions';

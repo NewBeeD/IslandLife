@@ -30,6 +30,11 @@ export interface Asset {
   // Phase 12: set while the asset is listed for a PATIENT sale (a pending sale is
   // recorded on the owner). Blocks a second listing/sale until it resolves.
   listedForSale?: boolean;
+  // Phase 17 (P17.2): the monthly fuel/upkeep this physical asset costs to run. When
+  // set, operating costs are attributed to the asset and de-duplicated across the
+  // ventures that share it, so two ventures using one truck pay one fuel line.
+  // Undefined → upkeep is carried at the venture level (the pre-Phase-17 path).
+  monthlyUpkeep?: number;
 }
 
 export interface Loan {
@@ -273,6 +278,25 @@ export interface TakenJob {
 // optional: when `ventures` is undefined the implicit single-stream fields on the
 // agent (incomeMode/spotBaseIncome/standingContract/outputScale/monthlyOperatingCosts)
 // are "venture 0" and behaviour is byte-identical to Phase 7 (S2, the digest holds).
+// A venture's hidden success/volatility profile (Phase 17, P17.4). Assigned once at
+// creation: `successBias` is whether this is fundamentally a good or a poor business
+// (some underperform or fail), `volatility` the size of its month-to-month swing.
+// Never projected — the player reads how it is going in prose, never as numbers (S3).
+export interface VentureProfile {
+  successBias: number; // mean multiplier on output (<1 underperforms, >1 thrives)
+  volatility: number; // standard deviation of the monthly performance swing
+}
+
+// A venture with a concrete, randomized production model (Phase 17, P17.3). Only the
+// juice stand uses one so far — its monthly takings are sampled from a real bag/
+// bottle model rather than a flat base. Undefined → the flat spot/standing model.
+export type VentureProduction = 'JUICE_STAND';
+
+// Who runs a venture day to day (Phase 17, P17.1). PLAYER — hands-on, it takes the
+// player's own time. OPERATOR — a hired hand runs it for a cut of the takings, so it
+// is passive (frees the player's time) but earns less. Undefined → PLAYER.
+export type VentureOperator = 'PLAYER' | 'OPERATOR';
+
 export interface Venture {
   id: string;
   industry: Industry;
@@ -283,7 +307,23 @@ export interface Venture {
   outputScale: number; // multiplies output after an upgrade (init 1)
   monthlyOperatingCosts: number; // EC$/month fuel & upkeep across this venture's assets
   assets: Asset[]; // assets owned by this venture (financed upgrades land here)
-  status: 'ACTIVE' | 'CLOSED';
+  // Phase 17: a venture can be paused (SHELVED — no income, reduced upkeep) when it
+  // cannot be sold, then reopened, or wound down for good (CLOSED).
+  status: 'ACTIVE' | 'CLOSED' | 'SHELVED';
+  // Phase 17, P17.1: how much of the player's working time a hands-on venture takes,
+  // and who runs it. A hired operator turns the venture passive (timeLoad ignored)
+  // and is paid `operatorShare` of the takings. All optional/defaulted: undefined
+  // timeLoad behaves as a non-time-tracked venture (the pre-Phase-17 path).
+  timeLoad?: number; // 0–1 of a working life when hands-on
+  operatedBy?: VentureOperator; // undefined → PLAYER (hands-on)
+  operatorShare?: number; // 0–1 cut the hired operator takes (operatedBy OPERATOR)
+  // Phase 17, P17.3/P17.4: a concrete production model, the hidden success/volatility
+  // profile, and the per-month performance factor sampled around it on each advance
+  // (stored so the projection reads it without re-drawing rng). Undefined everywhere
+  // → a flat, non-fluctuating venture (byte-identical to before).
+  production?: VentureProduction;
+  profile?: VentureProfile;
+  performanceFactor?: number; // this month's sampled multiplier on output (init/undef → 1)
   // The venture's barrier to entry (Phase 10). Only LOW-barrier ventures saturate —
   // their SPOT income scales down as more people crowd the same trade in the parish.
   // Optional: undefined behaves as a non-saturating venture (the Phase 8 path).
@@ -484,6 +524,11 @@ export interface NewVentureSpec {
   maxTermMonths: number;
   minCash?: number; // wealth gate (P10.4): hidden until the player can plausibly fund it
   minCredential?: CredentialLevel; // a credential gate (Phase 9), absent → no gate
+  // Phase 17: how much of the player's time the venture takes when run hands-on
+  // (P17.1), and a concrete production model if it has one (P17.3, the juice stand).
+  // Absent timeLoad → derived from the barrier tier.
+  timeLoad?: number;
+  production?: VentureProduction;
 }
 
 // The hidden spec of an asset-upgrade opportunity (Phase 7). A bigger boat, a

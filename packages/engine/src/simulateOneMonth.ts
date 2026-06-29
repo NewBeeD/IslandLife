@@ -169,7 +169,12 @@ export function simulateOneMonth(world: WorldState): WorldState {
     // digest is unchanged.
     const activeDomains = new Set<keyof typeof agent.experience>();
     if (hasVentures(agent)) {
-      for (const v of activeVentures(agent)) activeDomains.add(INDUSTRY_DOMAIN[v.industry]);
+      // Phase 17: a venture run by a hired operator is not the player's own hands at
+      // work, so it builds no experience for them (P17.1).
+      for (const v of activeVentures(agent)) {
+        if (v.operatedBy === 'OPERATOR') continue;
+        activeDomains.add(INDUSTRY_DOMAIN[v.industry]);
+      }
     } else if (agent.occupation) {
       activeDomains.add(INDUSTRY_DOMAIN[agent.occupation]);
     }

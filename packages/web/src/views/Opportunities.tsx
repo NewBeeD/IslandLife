@@ -5,7 +5,7 @@ import type {
   OpportunitiesDTO,
   OpportunityDTO,
 } from '@island/shared';
-import { api } from '../api/client';
+import { api, type VentureCommitmentInput } from '../api/client';
 
 function ec(n: number): string {
   if (!Number.isFinite(n)) n = 0;
@@ -185,6 +185,13 @@ function FinancingPanel({
     Math.min(financing.maxDownPayment, Math.round(financing.assetPrice * 0.2)),
   );
   const [term, setTerm] = useState(financing.termOptions[0] ?? 36);
+  // P17.1 — the time-commitment choice for a hands-on new venture. Default to running
+  // it yourself when you have the time, otherwise no choice is preselected (the player
+  // must hire or switch before they can commit).
+  const commitment = financing.commitment;
+  const [commitMode, setCommitMode] = useState<VentureCommitmentInput | null>(
+    commitment ? (commitment.required ? null : { mode: 'SOLO' }) : null,
+  );
   const [quote, setQuote] = useState<FinancingQuoteDTO | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -223,19 +230,22 @@ function FinancingPanel({
     setBusy(true);
     setError(null);
     try {
-      await api.resolveFinancing(saveId, decisionId, down, term);
+      await api.resolveFinancing(saveId, decisionId, down, term, commitMode ?? undefined);
       await onResolved();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
-  }, [saveId, decisionId, down, term, onResolved]);
+  }, [saveId, decisionId, down, term, commitMode, onResolved]);
 
   const counterShortfall = quote ? financing.assetPrice - quote.approvedLoan : 0;
   const canTakeCounter = quote?.outcome === 'COUNTER' && counterShortfall <= financing.cashOnHand;
+  // A hands-on venture needs the time question answered before committing.
+  const commitmentSatisfied = !commitment || commitMode !== null;
   const canAccept =
     !!quote &&
+    commitmentSatisfied &&
     (quote.outcome === 'APPROVED' ||
       (quote.outcome === 'COUNTER' && quote.approvedLoan + down >= financing.assetPrice));
 
@@ -308,6 +318,48 @@ function FinancingPanel({
           </>
         )}
       </div>
+
+      {commitment && (
+        <div className="financing__commitment">
+          <p className="muted">{commitment.timeNote}</p>
+          {!commitment.required && (
+            <label className="financing__commit-option">
+              <input
+                type="radio"
+                name="commit"
+                checked={commitMode?.mode === 'SOLO'}
+                onChange={() => setCommitMode({ mode: 'SOLO' })}
+                disabled={busy}
+              />
+              <span>Run it yourself</span>
+            </label>
+          )}
+          {commitment.canHire && (
+            <label className="financing__commit-option">
+              <input
+                type="radio"
+                name="commit"
+                checked={commitMode?.mode === 'HIRE'}
+                onChange={() => setCommitMode({ mode: 'HIRE' })}
+                disabled={busy}
+              />
+              <span>Take someone on to run it — {commitment.operatorNote}</span>
+            </label>
+          )}
+          {commitment.switchable.map((s) => (
+            <label className="financing__commit-option" key={s.ventureId}>
+              <input
+                type="radio"
+                name="commit"
+                checked={commitMode?.mode === 'SWITCH' && commitMode.closeVentureId === s.ventureId}
+                onChange={() => setCommitMode({ mode: 'SWITCH', closeVentureId: s.ventureId })}
+                disabled={busy}
+              />
+              <span>Wind down {s.label} and run this yourself</span>
+            </label>
+          ))}
+        </div>
+      )}
 
       <div className="financing__actions">
         <button className="primary" onClick={accept} disabled={busy || !canAccept}>

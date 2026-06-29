@@ -2,10 +2,15 @@ import { buildDecisionSituation } from '@island/narrative';
 import {
   STUDY_LOAN_MAX_TERM_MONTHS,
   STUDY_LOAN_MIN_TERM_MONTHS,
+  activeVentures,
+  plannedFreeTime,
+  ventureTimeLoad,
+  ventureTimeLoadForTier,
   type UpgradeQuote,
 } from '@island/engine';
 import type {
   DecisionDTO,
+  FinancingCommitmentDTO,
   FinancingControlDTO,
   FinancingQuoteDTO,
   Opportunity,
@@ -71,10 +76,38 @@ function termOptionsFor(spec: { minTermMonths: number; maxTermMonths: number }):
   return opts;
 }
 
+// The time-commitment choice for a hands-on new venture (Phase 17, P17.1). Present
+// only for a NEW_VENTURE; `required` when the player's day is already full and they
+// must hire an operator or step back from a venture they already run. No timeLoad
+// numbers cross the wire — only prose and the names of the ventures they could drop.
+function commitmentFor(world: WorldState, opp: Opportunity): FinancingCommitmentDTO | undefined {
+  const spec = opp.newVenture;
+  if (!spec) return undefined;
+  const p = world.player;
+  const handsOnLoad = ventureTimeLoadForTier(spec.timeLoad, spec.barrierTier);
+  const required = handsOnLoad > plannedFreeTime(p) + 1e-6;
+  const switchable = activeVentures(p)
+    .filter((v) => ventureTimeLoad(v) > 0)
+    .map((v) => ({ ventureId: v.id, label: v.label }));
+  return {
+    required,
+    timeNote: required
+      ? 'Your days are already full. To run this yourself you would have to step back from ' +
+        'something you already do — or take someone on to run it for you.'
+      : 'It would take real hours of your week, but you have the time for it if you want it.',
+    canHire: true,
+    operatorNote:
+      'Put someone trustworthy in charge and it runs without you — but a share of what it ' +
+      'makes goes to them for the trouble.',
+    switchable,
+  };
+}
+
 function financingFor(world: WorldState, opp: Opportunity | undefined): FinancingControlDTO | undefined {
   const spec = opp ? financeableSpec(opp) : undefined;
-  if (!spec) return undefined;
+  if (!spec || !opp) return undefined;
   const cash = Math.floor(world.player.cash);
+  const commitment = commitmentFor(world, opp);
   return {
     assetLabel: spec.label,
     assetPrice: spec.price,
@@ -82,6 +115,7 @@ function financingFor(world: WorldState, opp: Opportunity | undefined): Financin
     minDownPayment: 0,
     cashOnHand: cash,
     termOptions: termOptionsFor(spec),
+    ...(commitment ? { commitment } : {}),
   };
 }
 

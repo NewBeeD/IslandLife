@@ -1,5 +1,7 @@
 import {
   GOODS,
+  JUICE_STAND,
+  JUICE_STAND_REFERENCE_REVENUE,
   OFFER_REOFFER_COOLDOWN_MONTHS,
   PARISHES,
   REPRESENTATIVE_GOOD,
@@ -7,7 +9,9 @@ import {
   hasRecentEquivalentOffer,
   opportunityLogicalKey,
 } from '@island/shared';
+import { OPERATOR_SHARE } from '@island/shared';
 import type {
+  Asset,
   CredentialLevel,
   DecisionOption,
   EducationProgram,
@@ -25,9 +29,14 @@ import type { LoanAssessment } from './banking';
 import {
   activeVentures,
   aggregateVentureIncome,
+  discontinueVenture,
   ensurePlayerVentures,
+  freeTime,
   hasVentures,
+  refreshVenturePerformance,
   ventureAssetType,
+  ventureProfileForRisk,
+  ventureTimeLoadForTier,
 } from './ventures';
 import {
   STUDY_LOAN_MAX_TERM_MONTHS,
@@ -256,38 +265,51 @@ function upgradeOnCooldown(world: WorldState): boolean {
 
 function surfaceUpgrade(world: WorldState): Opportunity | null {
   if (upgradeOnCooldown(world)) return null;
-  const candidate = upgradeCandidates(world)[0];
-  if (!candidate) return null;
-  const { template: t, industry, ventureId } = candidate;
-  const suffix = ventureId ? `${ventureId}_` : '';
-  const oppId = `OPP_${t.id}_${suffix}${world.month}`;
-  const decId = `DEC_${t.id}_${suffix}${world.month}`;
-  const opportunity: Opportunity = {
-    id: oppId,
-    kind: 'ASSET_UPGRADE',
-    industry,
-    npcName: t.vendorName,
-    channelId: UPGRADE_CHANNEL,
-    surfacedMonth: world.month,
-    windowMonths: UPGRADE_WINDOW,
-    status: 'OPEN',
-    decisionId: decId,
-    monthlyAmount: 0,
-    upgrade: {
-      id: t.id, assetType: t.assetType, assetSize: t.assetSize, assetLabel: t.assetLabel,
-      assetPrice: t.assetPrice, outputScaleDelta: t.outputScaleDelta,
-      operatingCostDelta: t.operatingCostDelta, riskLevel: t.riskLevel,
-      minTermMonths: t.minTermMonths, maxTermMonths: t.maxTermMonths,
-    },
-    // Only set when targeting a venture, so the single-stream opportunity is
-    // byte-identical to Phase 7 (no `ventureId` key).
-    ...(ventureId ? { ventureId } : {}),
-  };
-  // P13.1 — don't re-surface the same rung while one is live or only just lapsed,
-  // so a declined/expired upgrade stops piling up duplicate "Passed" rows.
-  if (hasRecentEquivalentOffer(world.opportunities, opportunityLogicalKey(opportunity), world.month, OFFER_REOFFER_COOLDOWN_MONTHS)) {
-    return null;
+  // P17.5 — consider EVERY active venture's next rung, not only the first, so an
+  // established venture (a grown juice stand, a second boat) is reachable for its own
+  // upgrade and not blocked by another venture always being first in line. Pick the
+  // first candidate whose rung is not still live or freshly lapsed (P13.1).
+  const candidates = upgradeCandidates(world);
+  let chosen: UpgradeCandidate | null = null;
+  let opportunity: Opportunity | null = null;
+  for (const candidate of candidates) {
+    const { template: t, industry, ventureId } = candidate;
+    const suffix = ventureId ? `${ventureId}_` : '';
+    const oppId = `OPP_${t.id}_${suffix}${world.month}`;
+    const decId = `DEC_${t.id}_${suffix}${world.month}`;
+    const built: Opportunity = {
+      id: oppId,
+      kind: 'ASSET_UPGRADE',
+      industry,
+      npcName: t.vendorName,
+      channelId: UPGRADE_CHANNEL,
+      surfacedMonth: world.month,
+      windowMonths: UPGRADE_WINDOW,
+      status: 'OPEN',
+      decisionId: decId,
+      monthlyAmount: 0,
+      upgrade: {
+        id: t.id, assetType: t.assetType, assetSize: t.assetSize, assetLabel: t.assetLabel,
+        assetPrice: t.assetPrice, outputScaleDelta: t.outputScaleDelta,
+        operatingCostDelta: t.operatingCostDelta, riskLevel: t.riskLevel,
+        minTermMonths: t.minTermMonths, maxTermMonths: t.maxTermMonths,
+      },
+      // Only set when targeting a venture, so the single-stream opportunity is
+      // byte-identical to Phase 7 (no `ventureId` key).
+      ...(ventureId ? { ventureId } : {}),
+    };
+    // P13.1 — skip a rung still live or only just lapsed, so a declined/expired upgrade
+    // stops piling up duplicate "Passed" rows; try the next venture's ladder instead.
+    if (hasRecentEquivalentOffer(world.opportunities, opportunityLogicalKey(built), world.month, OFFER_REOFFER_COOLDOWN_MONTHS)) {
+      continue;
+    }
+    chosen = candidate;
+    opportunity = built;
+    break;
   }
+  if (!chosen || !opportunity) return null;
+  const { decisionId: decId } = opportunity;
+  const oppId = opportunity.id;
   const decision: PlayerDecision = {
     id: decId,
     opportunityId: oppId,
@@ -324,7 +346,7 @@ const NEW_VENTURE_FROM_MONTH = 2;
 // Cross-domain entry catalogue across every industry and barrier tier. Prices in EC$.
 const NEW_VENTURE_CATALOGUE: NewVentureSpec[] = [
   // LOW barrier — cheap, fast, always offerable; takings saturate as people crowd in.
-  { id: 'NV_JUICE', industry: 'RETAIL', label: 'a roadside juice and snack stand', ventureLabel: 'the juice stand', entryCost: 1500, startingOutputIncome: 650, operatingCost: 150, barrierTier: 'LOW', riskLevel: 'LOW', minTermMonths: 12, maxTermMonths: 24 },
+  { id: 'NV_JUICE', industry: 'RETAIL', label: 'a roadside juice and snack stand', ventureLabel: 'the juice stand', entryCost: 1500, startingOutputIncome: JUICE_STAND_REFERENCE_REVENUE, operatingCost: JUICE_STAND.fruitCostPerBag + JUICE_STAND.sugarTransportPerBag, barrierTier: 'LOW', riskLevel: 'LOW', minTermMonths: 12, maxTermMonths: 24, production: 'JUICE_STAND' },
   { id: 'NV_RESALE', industry: 'INFORMAL_TRADE', label: 'a small resale line — phone cards, household bits', ventureLabel: 'the resale line', entryCost: 2200, startingOutputIncome: 750, operatingCost: 180, barrierTier: 'LOW', riskLevel: 'MEDIUM', minTermMonths: 12, maxTermMonths: 24 },
   // MEDIUM barrier — a real piece of kit, some capital, steadier money.
   { id: 'NV_PROVISION', industry: 'AGRICULTURE', label: 'a rented provision plot and tools', ventureLabel: 'the provision garden', entryCost: 12000, startingOutputIncome: 1100, operatingCost: 250, barrierTier: 'MEDIUM', riskLevel: 'MEDIUM', minTermMonths: 24, maxTermMonths: 60, minCash: 2500 },
@@ -852,11 +874,21 @@ export interface UpgradeResolution {
 // amount is authoritative — a COUNTER is honoured by covering the shortfall in cash;
 // a DECLINE or an unaffordable down payment throws. Pure (mutates the world, never
 // world.rng).
+// How the player resolves a new venture that would over-fill their working time
+// (Phase 17, P17.1). SOLO — run it themselves (rejected if there is no time). HIRE —
+// take someone on to run it (passive, a cut of the takings). SWITCH — wind down a
+// venture they already run to free the time, then run the new one themselves.
+export type VentureCommitment =
+  | { mode: 'SOLO' }
+  | { mode: 'HIRE' }
+  | { mode: 'SWITCH'; closeVentureId: string };
+
 export function applyUpgradeFinancing(
   world: WorldState,
   decisionId: string,
   downPayment: number,
   termMonths: number,
+  commitment?: VentureCommitment,
 ): UpgradeResolution {
   const { decision, opportunity, spec } = findFinanceable(world, decisionId);
   const p = world.player;
@@ -895,7 +927,7 @@ export function applyUpgradeFinancing(
   }
 
   if (opportunity.kind === 'NEW_VENTURE' && opportunity.newVenture) {
-    applyNewVenture(world, opportunity.newVenture, effectiveDown, a, principal);
+    applyNewVenture(world, opportunity.newVenture, effectiveDown, a, principal, commitment);
   } else if (opportunity.upgrade) {
     applyUpgrade(world, opportunity, opportunity.upgrade, effectiveDown, a, principal);
   } else {
@@ -990,9 +1022,29 @@ function applyNewVenture(
   effectiveDown: number,
   a: LoanAssessment,
   principal: number,
+  commitment?: VentureCommitment,
 ): void {
   const p = world.player;
   ensurePlayerVentures(world);
+
+  // P17.1 — resolve the time commitment before any money moves. HIRE makes the venture
+  // passive (an operator runs it for a cut); SWITCH winds down an existing venture to
+  // free the time; otherwise the player runs it themselves, which is refused when their
+  // day is already full (a full-time job, or other hands-on ventures).
+  const handsOnLoad = ventureTimeLoadForTier(spec.timeLoad, spec.barrierTier);
+  let operatedBy: 'PLAYER' | 'OPERATOR' = 'PLAYER';
+  if (commitment?.mode === 'HIRE') {
+    operatedBy = 'OPERATOR';
+  } else if (commitment?.mode === 'SWITCH') {
+    discontinueVenture(world, commitment.closeVentureId);
+  }
+  if (operatedBy === 'PLAYER' && handsOnLoad > freeTime(p) + 1e-6) {
+    throw new DecisionError(
+      'You do not have the time to run this yourself — you would have to take someone on to run it, or step back from something you already do.',
+      'BAD_OPTION',
+    );
+  }
+
   p.cash -= effectiveDown;
 
   if (principal > 0) {
@@ -1002,6 +1054,19 @@ function applyNewVenture(
   }
 
   const ventureId = `VEN_${spec.id}_${world.month}`;
+  // P17.2 — attribute the venture's fixed fuel/upkeep to its physical asset, so a
+  // future shared asset is charged once. The juice stand's cost is variable (fruit &
+  // sugar, sampled monthly), so it stays a venture-level cost instead.
+  const assetBacked = spec.entryCost > 0 && spec.production !== 'JUICE_STAND';
+  const asset: Asset | null =
+    spec.entryCost > 0
+      ? {
+          id: `${spec.id}@${ventureId}`,
+          type: ventureAssetType(spec.industry),
+          value: spec.entryCost,
+          ...(assetBacked ? { monthlyUpkeep: spec.operatingCost } : {}),
+        }
+      : null;
   const venture: Venture = {
     id: ventureId,
     industry: spec.industry,
@@ -1010,13 +1075,17 @@ function applyNewVenture(
     spotBaseIncome: spec.startingOutputIncome,
     standingContract: null,
     outputScale: 1,
-    monthlyOperatingCosts: spec.operatingCost,
-    assets:
-      spec.entryCost > 0
-        ? [{ id: `${spec.id}@${ventureId}`, type: ventureAssetType(spec.industry), value: spec.entryCost }]
-        : [],
+    monthlyOperatingCosts: assetBacked ? 0 : spec.operatingCost,
+    assets: asset ? [asset] : [],
     status: 'ACTIVE',
     barrierTier: spec.barrierTier,
+    timeLoad: handsOnLoad,
+    operatedBy,
+    ...(operatedBy === 'OPERATOR' ? { operatorShare: OPERATOR_SHARE } : {}),
+    // P17.4 — a hidden success/volatility profile so some ventures underperform or fail.
+    profile: ventureProfileForRisk(spec.riskLevel, world.rng),
+    performanceFactor: 1,
+    ...(spec.production ? { production: spec.production } : {}),
   };
   (p.ventures ??= []).push(venture);
   // Reflect the new stream in monthly income immediately (recomputed each advance).
@@ -1050,6 +1119,10 @@ export function updatePlayerIncome(world: WorldState): void {
   // wage worker's rate climbs as experience/tools/credentials accrue (P15.2). A no-op
   // for a non-wage player, so the digest holds.
   refreshWageRates(world);
+  // Phase 17 (P17.3/P17.4): resample each venture's month — randomized juice-stand
+  // sales and the good/bad-season swing — before income is summed, so a venture's take
+  // varies month to month. A no-op for a venture with no production model or profile.
+  refreshVenturePerformance(world);
   // Phase 8: a venture portfolio earns the sum of its active ventures' income; the
   // single-stream fields below are unused once `ventures` is populated.
   if (hasVentures(p)) {
