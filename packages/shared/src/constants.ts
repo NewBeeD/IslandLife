@@ -1,6 +1,22 @@
 import type { Country, Good } from './types';
 import type { Industry, ParishId } from './enums';
 
+// ── The wage model (Phase 15) ────────────────────────────────────────────────
+// Dominica's basic wage benchmark and the shape of a working month, used to ground
+// day-labour income so the per-day figure the player sees and the money banked
+// agree (idea 1), and so a new worker starts at a calibrated, realistic base
+// (idea 2). A wage worker's monthly income is dailyRate × workdaysPerMonth.
+export const DOMINICA_BASE_HOURLY = 7.5; // EC$/hr — the basic-rate benchmark (idea 2)
+export const WAGE_HOURS_PER_DAY = 8;
+export const WAGE_WORKDAYS_PER_MONTH = 20; // ~5 days a week
+export const DOMINICA_BASE_DAY = DOMINICA_BASE_HOURLY * WAGE_HOURS_PER_DAY; // EC$60/day
+// A green hire starts a defined margin above the basic legal rate (idea 2: $8–10/hr
+// against a $7.50 base), so an unskilled worker begins around EC$72/day.
+export const NEW_WORKER_RATE_PREMIUM = 1.2;
+// The most skill, credentials, and tools together can lift a day rate above the
+// green-hire base — a realistic ceiling so wages rise but stay grounded.
+export const WAGE_RATE_CEILING_MULTIPLIER = 2.6;
+
 export const COUNTRY: Country = {
   id: 'DM',
   name: 'Dominica',

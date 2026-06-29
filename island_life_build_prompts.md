@@ -26,10 +26,13 @@ of work with an acceptance test, the files it touches, and its dependencies.
   phantom expired enrolment), and Phase 14 loan lifecycle & financing controls (loans
   amortize and close, pay off early / resize installments, paid-vs-remaining on the money
   view, friend-loan installment preview, and a financing slider on every investment
-  including a study loan for tuition). **Next:** the rest of the `ideas.md` playtest
-  backlog — **Phases 15–19** (the wage model, a job market, venture realism, and
-  negotiable/always-on deals), then the original post-slice backlog (P-B1 firm formation
-  onward).
+  including a study loan for tuition), and Phase 15 the wage model & worker progression
+  (wage work grounded in a day-rate × workdays model so the per-day and per-month figures
+  reconcile, a new worker starting at Dominica's calibrated base, the rate rising with
+  skill / tools / credentials, independent side jobs for an experienced hand, and a
+  Skills view). **Next:** the rest of the `ideas.md` playtest backlog — **Phases 16–19**
+  (a job market, venture realism, and negotiable/always-on deals), then the original
+  post-slice backlog (P-B1 firm formation onward).
 
 ## How to read this
 
@@ -881,7 +884,7 @@ These are the guardrails I follow on every change; they're not steps, they're co
   `loanProjection.test.ts` (paid-to-date), 1 in `funding.test.ts` (installment preview);
   the iceberg contract stays green (the loan figures shown are the player's own books).
 
-## Phase 15 — The wage model & worker progression (bug + realism) 🟠
+## Phase 15 — The wage model & worker progression (bug + realism) ✅ DONE
 
 > Goal: replace the opaque single `monthlyIncome` for **wage work** with a grounded
 > `dailyRate × workdays` model, so the per-day figure the player sees and the money
@@ -929,10 +932,32 @@ These are the guardrails I follow on every change; they're not steps, they're co
   `web/App.tsx`. *Acceptance:* the player can see the skills they've earned with
   descriptions; iceberg test green (no numeric capitals leak).
 
-- *Phase acceptance:* `typecheck` ×2 + `npm test` green; a construction worker starts
-  at the Dominica base, the per-day and per-month figures reconcile, and the rate
-  visibly grows with experience, tools, and a credential — all on a new Skills view.
-  Deliberate, noted digest change where wage workers exist.
+- *Phase acceptance:* ✅ `npm run typecheck && npm run typecheck:web && npm test` green
+  (183 tests; +7 for Phase 15). Wage work is now grounded in a day-rate model: a new
+  `engine/wages.ts` (pure, S1) with `DOMINICA_BASE_DAY` (EC$7.50/hr × 8h = $60) plus a
+  `NEW_WORKER_RATE_PREMIUM` so a green hire starts ~EC$72/day, and a `WageProfile`
+  (`dailyRate`/`workdaysPerMonth`/`hoursPerDay`) on the agent and on a venture. A wage
+  worker banks `dailyRate × workdaysPerMonth`, so the per-day figure and the money
+  banked reconcile exactly (P15.1, idea 1) — replacing the opaque `rng.range(800,1400)`
+  roll for the construction trade. The day rate is recomputed each advance
+  (`refreshWageRates` in `updatePlayerIncome`) as `base × f(experience, knowledge,
+  credentialLevel, ownedTools)` within a realistic ceiling, so months of skill, a tools
+  upgrade, and a completed credential each visibly raise the pay (P15.2, ideas 2 & 8);
+  a fresh certificate lifts the monthly take by a clear margin. An experienced worker
+  is offered independent, paid-on-completion `SIDE_JOB` gigs (gated on months +
+  domain experience, drawn from `world.rng`); a green worker is not (P15.3, idea 1).
+  A new `SkillsDTO` + `server/projection/skills.ts` + `GET /saves/:id/skills` + a
+  `web/views/Skills.tsx` tab let the player see the trades they have built up (as
+  qualitative bands with descriptions, never raw 0–1 scores — S3), their credential,
+  and their current day rate (their own money fact); the iceberg contract snapshots the
+  skills DTO too and stays green (P15.4, idea 7). The wage model is additive — the
+  no-choices default player (a fisher) carries no `wageProfile`, so the determinism
+  digest and golden master are **unchanged**; the digest only moves for a created wage
+  worker, as expected (S2/P-X2). New `engine/wages.ts`
+  (`isWageIndustry`/`newWorkerWageProfile`/`wageDailyRate`/`wageMonthlyIncome`/
+  `wageSkillMultiplier`/`refreshWageRates`); `WageProfile` + `wageProfile?` on
+  `NPCAgent`/`Venture`; `SIDE_JOB` opportunity kind + `SideJobSpec`; `SkillsDTO`;
+  6 tests in `wages.test.ts` + a Phase-15 case in the iceberg contract.
 
 ## Phase 16 — Jobs & the job market (feature) 🟡
 

@@ -5,6 +5,7 @@ import type {
   NPCAgent,
   StartingJob,
 } from '@island/shared';
+import { isWageIndustry, newWorkerWageProfile, wageDailyRate, wageMonthlyIncome } from '../wages';
 
 // experience-domain key → Industry enum (the agent's occupation namespace).
 const DOMAIN_INDUSTRY: Record<keyof ExperienceDomains, Industry> = {
@@ -72,4 +73,15 @@ export function hydratePlayerInto(agent: NPCAgent, p: CharacterProfile): void {
     agent.monthlyIncome = 0;
   }
   agent.employer = null;
+
+  // Phase 15: a wage-trade worker (construction day labour) earns through the
+  // grounded day-rate model — a calibrated green-hire base lifted by the skill they
+  // bring, so the per-day and per-month figures agree (ideas 1–2). This replaces the
+  // opaque starting revenue roll for wage trades; other trades keep spot/standing.
+  if (isWageIndustry(agent.occupation)) {
+    const profile = newWorkerWageProfile();
+    profile.dailyRate = wageDailyRate(agent, agent.occupation);
+    agent.wageProfile = profile;
+    agent.monthlyIncome = wageMonthlyIncome(profile);
+  }
 }

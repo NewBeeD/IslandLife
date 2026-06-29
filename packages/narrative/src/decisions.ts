@@ -45,6 +45,7 @@ export function buildDecisionSituation(world: WorldState, decision: PlayerDecisi
   if (decision.kind === 'NEW_VENTURE') return buildNewVentureSituation(world, decision);
   if (decision.kind === 'CROWDFUND') return buildCrowdfundSituation(world, decision);
   if (decision.kind === 'PARTNERSHIP') return buildPartnershipSituation(world, decision);
+  if (decision.kind === 'SIDE_JOB') return buildSideJobSituation(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'the buyer';
   const amount = standingAmount(decision);
@@ -187,6 +188,26 @@ function buildPartnershipSituation(world: WorldState, decision: PlayerDecision):
   );
 }
 
+// The framing of a side job (Phase 15): independent paid work for an experienced
+// hand — a few days on a job, paid when it is done. A small, plain choice: take the
+// extra work, or let it go. No mechanics, no promised return.
+function buildSideJobSituation(world: WorldState, decision: PlayerDecision): string {
+  const opp = findOpportunity(world, decision);
+  const spec = opp?.sideJob;
+  const place = parishName(world);
+  if (!spec) {
+    return `There is a bit of work going on the side, if your days are your own to give.`;
+  }
+  return (
+    `Word reaches you of work going — ${spec.label}. Nothing to do with your usual week; a job ` +
+    `you would take on your own account, paid ${formatCurrency(spec.payout)} when it is finished.\n\n` +
+    `You have put in enough time now that people around ${place} know your hands are good, and ` +
+    `they come to you when they are short. It is money on top of the rest — if you have the days ` +
+    `in you, on top of everything else you carry.\n\n` +
+    `Do you take it on, or leave it for another man?`
+  );
+}
+
 // A short, in-voice acknowledgement of the choice just made — the line the
 // resolution returns. No outcome, no judgement; the consequence comes later.
 export function buildDecisionAcknowledgement(world: WorldState, decision: PlayerDecision): string {
@@ -195,6 +216,7 @@ export function buildDecisionAcknowledgement(world: WorldState, decision: Player
   if (decision.kind === 'NEW_VENTURE') return buildNewVentureAcknowledgement(world, decision);
   if (decision.kind === 'CROWDFUND') return buildCrowdfundAcknowledgement(world, decision);
   if (decision.kind === 'PARTNERSHIP') return buildPartnershipAcknowledgement(world, decision);
+  if (decision.kind === 'SIDE_JOB') return buildSideJobAcknowledgement(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'her';
   const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
@@ -260,6 +282,19 @@ function buildPartnershipAcknowledgement(world: WorldState, decision: PlayerDeci
     );
   }
   return `You let it go. You keep to your own work, your own books, your own say. ${name} takes it well enough.`;
+}
+
+// The acknowledgement after a side job (Phase 15): the work taken on, or let go. A
+// few days' graft and the money at the end, no more than that.
+function buildSideJobAcknowledgement(world: WorldState, decision: PlayerDecision): string {
+  const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
+  if (chosen?.effect.sideJobPayout != null) {
+    return (
+      `You take it on. A few days of graft on top of the rest, and the money in your hand at the ` +
+      `end of it. The kind of work that comes to a man once his name is good for it.`
+    );
+  }
+  return `You let it go. Your week is full enough as it is, and there will be other work when you have the days for it.`;
 }
 
 // The acknowledgement after an enrolment choice (Phase 9): the forms signed and the

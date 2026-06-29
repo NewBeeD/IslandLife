@@ -56,6 +56,7 @@ import {
   toLoanActionResultDTO,
   toMoneyDTO,
   toOpportunitiesDTO,
+  toSkillsDTO,
   toStateDTO,
 } from './projection';
 
@@ -159,6 +160,14 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
       return toFeedDTO(month, entries);
     },
   );
+
+  // GET /saves/:id/skills — the trades, credential, and wage day rate the player has
+  // built up (Phase 15). Qualitative prose; no hidden 0–1 scores cross the wire.
+  app.get<{ Params: { id: string } }>('/saves/:id/skills', async (req, reply) => {
+    const loaded = await loadOr404(req.params.id, reply);
+    if (!loaded) return;
+    return toSkillsDTO(loaded.world);
+  });
 
   // GET /saves/:id/community — relationships + reputation as prose.
   app.get<{ Params: { id: string } }>('/saves/:id/community', async (req, reply) => {

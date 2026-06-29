@@ -244,6 +244,44 @@ button:disabled {
   line-height: 1.55;
 }
 
+/* Skills (Phase 15) */
+.skills {
+  max-width: 32rem;
+}
+.skills__headline-text {
+  line-height: 1.65;
+  font-size: 1.05rem;
+}
+.skills section {
+  margin-top: 1.4rem;
+}
+.skills__wage {
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.8rem 1rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+.skills__wage-rate {
+  margin: 0.2rem 0;
+  font-size: 1.25rem;
+}
+.skills__wage-detail {
+  line-height: 1.55;
+}
+.skill {
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.skill__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.skill__detail {
+  margin: 0.3rem 0 0;
+  line-height: 1.55;
+}
+
 /* Money */
 .money {
   max-width: 30rem;

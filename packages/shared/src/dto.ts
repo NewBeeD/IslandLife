@@ -116,6 +116,33 @@ export interface MoneyDTO {
   ownership?: OwnershipLine[];
 }
 
+// GET /saves/:id/skills — the Skills view (Phase 15, P15.4). The trades the player
+// has built up over the years, their formal credential, and (for a wage worker)
+// their current day rate — all as qualitative prose plus their own money facts. The
+// hidden 0–1 skill/capital scores never cross the wire (S3): each trade is a band
+// with a description, not a number.
+export interface SkillTradeDTO {
+  label: string; // "Construction"
+  standing: string; // a qualitative band, e.g. "A seasoned hand"
+  detail: string; // prose description of where they stand in the trade
+}
+
+// A wage worker's own day rate (Phase 15). These are the player's own money facts,
+// like the money view — EC$ figures, not hidden mechanics.
+export interface WageSummaryDTO {
+  label: string; // "Construction day rate"
+  dailyRate: number; // EC$/day, current
+  perMonth: number; // EC$ — dailyRate × workdays (what it banks)
+  detail: string; // prose on how the rate has grown / can grow
+}
+
+export interface SkillsDTO {
+  headline: string; // a one-line summary of where the player stands
+  credential: string; // their formal qualification, in prose
+  trades: SkillTradeDTO[]; // the trades they have built up (most accomplished first)
+  wage?: WageSummaryDTO; // present for a wage worker — their current day rate
+}
+
 // GET /saves/:id/feed?month= — the Daily Life feed for a month.
 export interface FeedEntryDTO {
   type: NarrativeEntryType;

@@ -1,6 +1,7 @@
 import {
   GOODS,
   OFFER_REOFFER_COOLDOWN_MONTHS,
+  PARISHES,
   REPRESENTATIVE_GOOD,
   credentialRank,
   hasRecentEquivalentOffer,
@@ -14,6 +15,7 @@ import type {
   NewVentureSpec,
   Opportunity,
   PlayerDecision,
+  SideJobSpec,
   UpgradeSpec,
   Venture,
   WorldState,
@@ -40,6 +42,7 @@ import {
   surfaceCrowdfund,
   surfacePartnership,
 } from './funding';
+import { isWageIndustry, refreshWageRates, wageDailyRate, wageMonthlyIncome } from './wages';
 import { clamp } from './rng';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -418,6 +421,124 @@ function surfaceNewVenture(world: WorldState): Opportunity | null {
   return opportunity;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 15 — independent side jobs for an experienced wage worker (P15.3).
+//
+// Once a wage worker (construction day labour) has put in enough time to work on
+// their own, short paid-on-completion gigs start coming their way — a few days
+// finishing a house, paid when the job is done (idea 1). A green worker is not
+// offered them; they unlock with experience. Surfaced from world.rng for variety.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SIDE_JOB_CHANNEL = 'WORD_AROUND';
+const SIDE_JOB_WINDOW = 2;
+const SIDE_JOB_COOLDOWN = 3;
+// A worker is only offered independent jobs once they could plausibly work alone.
+const SIDE_JOB_FROM_MONTH = 6;
+const SIDE_JOB_MIN_EXPERIENCE = 0.35;
+// Independent work pays a premium over a day's wage on someone else's site.
+const SIDE_JOB_RATE_PREMIUM = 1.25;
+
+// The player's wage-work trade and their experience in it, or null if they are not a
+// wage worker. Reads "venture 0" when a portfolio runs, else the single-stream fields.
+function playerWageContext(world: WorldState): { industry: Industry; experience: number } | null {
+  const p = world.player;
+  if (hasVentures(p)) {
+    for (const v of activeVentures(p)) {
+      if (v.wageProfile) {
+        return { industry: v.industry, experience: p.experience[DOMAIN_OF[v.industry]] ?? 0 };
+      }
+    }
+    return null;
+  }
+  if (p.wageProfile && p.occupation) {
+    return { industry: p.occupation, experience: p.experience[DOMAIN_OF[p.occupation]] ?? 0 };
+  }
+  return null;
+}
+
+function sideJobOnCooldown(world: WorldState): boolean {
+  let lastClosed = -Infinity;
+  for (const o of world.opportunities) {
+    if (o.kind !== 'SIDE_JOB') continue;
+    if (o.status === 'OPEN') return true;
+    const closed = o.surfacedMonth + o.windowMonths;
+    if (closed > lastClosed) lastClosed = closed;
+  }
+  return world.month - lastClosed < SIDE_JOB_COOLDOWN;
+}
+
+function parishName(world: WorldState): string {
+  return PARISHES.find((p) => p.id === world.player.parish)?.name ?? 'the parish';
+}
+
+// Surface an independent side job if the worker is experienced enough (P15.3). The
+// payout is the worker's own day rate × the days × an independence premium, so a more
+// skilled worker is offered more lucrative gigs. Draws days from world.rng for variety.
+function surfaceSideJob(world: WorldState): Opportunity | null {
+  if (world.month < SIDE_JOB_FROM_MONTH || sideJobOnCooldown(world)) return null;
+  const ctx = playerWageContext(world);
+  if (!ctx || ctx.experience < SIDE_JOB_MIN_EXPERIENCE) return null;
+
+  const days = world.rng.int(4, 9);
+  const payout = Math.round(wageDailyRate(world.player, ctx.industry) * days * SIDE_JOB_RATE_PREMIUM);
+  const place = parishName(world);
+  const spec: SideJobSpec = {
+    id: `SJ_${ctx.industry}_${world.month}`,
+    industry: ctx.industry,
+    label: `${days} days finishing a job in ${place}`,
+    payout,
+    days,
+  };
+
+  const oppId = `OPP_${spec.id}`;
+  const decId = `DEC_${spec.id}`;
+  const options: DecisionOption[] = [
+    {
+      id: 'TAKE',
+      label: 'Take the work',
+      description:
+        `${days} days on the job, ${formatEc(payout)} in your hand when it is finished. ` +
+        'Extra on top of your usual week — yours if you want it.',
+      effect: { sideJobPayout: payout },
+    },
+    {
+      id: 'PASS',
+      label: 'Leave it — your hands are full',
+      description: 'You have enough on already. Let someone else take this one.',
+      effect: {},
+    },
+  ];
+  const decision: PlayerDecision = {
+    id: decId,
+    opportunityId: oppId,
+    kind: 'SIDE_JOB',
+    surfacedMonth: world.month,
+    windowMonths: SIDE_JOB_WINDOW,
+    options,
+    chosenOptionId: null,
+    resolvedMonth: null,
+    consequenceMonth: null,
+    consequenceDelivered: false,
+  };
+  const opportunity: Opportunity = {
+    id: oppId,
+    kind: 'SIDE_JOB',
+    industry: ctx.industry,
+    npcName: 'a contractor short of hands',
+    channelId: SIDE_JOB_CHANNEL,
+    surfacedMonth: world.month,
+    windowMonths: SIDE_JOB_WINDOW,
+    status: 'OPEN',
+    decisionId: decId,
+    monthlyAmount: 0,
+    sideJob: spec,
+  };
+  world.opportunities.push(opportunity);
+  world.decisions.push(decision);
+  return opportunity;
+}
+
 // How long a settled (EXPIRED/ACCEPTED/DECLINED) opportunity is kept on the world
 // before it is swept away (P13.3). Long enough to outlast the re-offer cooldown and
 // any delayed consequence, so pruning never races the lifecycle that still needs it.
@@ -510,6 +631,10 @@ export function surfaceOpportunities(world: WorldState): Opportunity[] {
   const partnership = surfacePartnership(world);
   if (partnership) surfaced.push(partnership);
 
+  // Independent side jobs for an experienced wage worker (Phase 15).
+  const sideJob = surfaceSideJob(world);
+  if (sideJob) surfaced.push(sideJob);
+
   return surfaced;
 }
 
@@ -558,6 +683,19 @@ export function resolveDecision(
     } else {
       decision.consequenceMonth = null;
       if (opportunity) opportunity.status = 'DECLINED';
+    }
+    return decision;
+  }
+
+  // Side job (Phase 15): taking it pays the gig on completion (cash now); passing is
+  // a no-op. No delayed MEMORY — a few days' work is its own small chapter.
+  if (decision.kind === 'SIDE_JOB') {
+    decision.consequenceMonth = null;
+    if (option.effect.sideJobPayout != null) {
+      world.player.cash += option.effect.sideJobPayout;
+      if (opportunity) opportunity.status = 'ACCEPTED';
+    } else if (opportunity) {
+      opportunity.status = 'DECLINED';
     }
     return decision;
   }
@@ -901,10 +1039,19 @@ function applyEnrolmentFinancing(
 // so the default player's income is untouched (the golden master holds). Pure.
 export function updatePlayerIncome(world: WorldState): void {
   const p = world.player;
+  // Phase 15: refresh wage day-rates from current skill before income is summed, so a
+  // wage worker's rate climbs as experience/tools/credentials accrue (P15.2). A no-op
+  // for a non-wage player, so the digest holds.
+  refreshWageRates(world);
   // Phase 8: a venture portfolio earns the sum of its active ventures' income; the
   // single-stream fields below are unused once `ventures` is populated.
   if (hasVentures(p)) {
     p.monthlyIncome = aggregateVentureIncome(world);
+    return;
+  }
+  // Phase 15: a single-stream wage worker banks dailyRate × workdays (idea 1).
+  if (p.wageProfile && isWageIndustry(p.occupation)) {
+    p.monthlyIncome = wageMonthlyIncome(p.wageProfile);
     return;
   }
   if (p.incomeMode === 'STANDING' && p.standingContract) {

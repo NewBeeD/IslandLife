@@ -4,6 +4,7 @@ import {
   friendBackerId,
   hasVentures,
   isFriendLoanBank,
+  isWageIndustry,
   netWorthOf,
   playerShareOf,
   resaleQuote,
@@ -71,9 +72,11 @@ function buildMarketWatch(world: WorldState): MarketWatchLine[] {
   const add = (ind: Industry | null): void => {
     if (ind && !industries.includes(ind)) industries.push(ind);
   };
+  // A wage worker's income is a day rate, not a market price, so it has no market-watch
+  // line (Phase 15) — skip any wage-profile source.
   if (hasVentures(p)) {
-    for (const v of activeVentures(p)) if (v.incomeMode !== 'STANDING') add(v.industry);
-  } else if (p.incomeMode !== 'STANDING') {
+    for (const v of activeVentures(p)) if (v.incomeMode !== 'STANDING' && !v.wageProfile) add(v.industry);
+  } else if (p.incomeMode !== 'STANDING' && !(p.wageProfile && isWageIndustry(p.occupation))) {
     add(p.occupation);
   }
 

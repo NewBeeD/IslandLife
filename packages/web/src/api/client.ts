@@ -13,6 +13,7 @@ import type {
   MoneyDTO,
   OpportunitiesDTO,
   SaleMode,
+  SkillsDTO,
   StateDTO,
 } from '@island/shared';
 
@@ -69,6 +70,9 @@ export const api = {
   },
   opportunities(saveId: string) {
     return get<OpportunitiesDTO>(`/saves/${saveId}/opportunities`);
+  },
+  skills(saveId: string) {
+    return get<SkillsDTO>(`/saves/${saveId}/skills`);
   },
   decision(saveId: string, decisionId: string) {
     return get<DecisionDTO>(`/saves/${saveId}/decisions/${decisionId}`);

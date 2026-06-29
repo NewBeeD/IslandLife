@@ -16,6 +16,7 @@ function titleFor(opp: Opportunity): string {
   if (opp.kind === 'NEW_VENTURE' && opp.newVenture) return `Something new — ${opp.newVenture.label}`;
   if (opp.kind === 'CROWDFUND') return 'Raising money among friends';
   if (opp.kind === 'PARTNERSHIP' && opp.partnership) return `Going in together — ${opp.partnership.companyName}`;
+  if (opp.kind === 'SIDE_JOB' && opp.sideJob) return `A job on the side — ${opp.sideJob.label}`;
   return opp.npcName;
 }
 
@@ -81,6 +82,16 @@ function descriptionFor(opp: Opportunity): string {
       `hold by yourself. The takings and the troubles both get shared.`
     );
   }
+  if (opp.kind === 'SIDE_JOB' && opp.sideJob) {
+    // The pay and the length are part of the offer (you know what the job pays); it is
+    // stated plainly, never as a "return". Independent work — yours to take or leave.
+    const sj = opp.sideJob;
+    return (
+      `${sj.days} days of work going, paid ${formatCurrency(sj.payout)} when it is done. ` +
+      `Separate from your usual week — a job you take on your own account, on top of the rest. ` +
+      `Money in your hand at the end of it, if the days are yours to give.`
+    );
+  }
   return 'An arrangement put to you.';
 }
 
@@ -90,6 +101,7 @@ function sourceFor(opp: Opportunity): string {
   if (opp.kind === 'NEW_VENTURE') return 'Word: going round the place.';
   if (opp.kind === 'CROWDFUND') return 'Word: among people who know you.';
   if (opp.kind === 'PARTNERSHIP') return `Heard: directly from ${opp.npcName}.`;
+  if (opp.kind === 'SIDE_JOB') return 'Word: a job going round.';
   return `Heard: directly from ${opp.npcName}.`;
 }
 
@@ -109,6 +121,9 @@ function windowFor(opp: Opportunity, world: WorldState): string {
   }
   if (opp.kind === 'PARTNERSHIP') {
     return monthsLeft <= 1 ? 'They want an answer this month.' : 'They are waiting on your word, but not forever.';
+  }
+  if (opp.kind === 'SIDE_JOB') {
+    return monthsLeft <= 1 ? 'They need someone this month.' : 'The work is there for now.';
   }
   if (monthsLeft <= 1) return 'She needs an answer this month.';
   return 'She is waiting on your word, but not forever.';

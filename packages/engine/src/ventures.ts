@@ -63,6 +63,12 @@ function lowBarrierSaturationFactor(world: WorldState, industry: Industry, paris
 // LOW-barrier hustle, the parish's crowding (Phase 10). A venture in a trade with no
 // representative good earns a flat base (still saturation-scaled if low-barrier).
 export function ventureGrossIncome(world: WorldState, parish: ParishId, venture: Venture): number {
+  // Phase 15: a wage-work venture earns the grounded day-rate model — dailyRate ×
+  // workdays — recomputed from the player's skill each advance (refreshWageRates
+  // keeps the stored rate fresh). Takes precedence over spot/standing.
+  if (venture.wageProfile) {
+    return Math.round(venture.wageProfile.dailyRate * venture.wageProfile.workdaysPerMonth);
+  }
   if (venture.incomeMode === 'STANDING' && venture.standingContract) {
     return venture.standingContract.monthlyAmount;
   }
@@ -181,6 +187,9 @@ function baseVentureFromSingleStream(p: NPCAgent): Venture | null {
       monthlyOperatingCosts: p.monthlyOperatingCosts ?? 0,
       assets: p.economicAssets.splice(0),
       status: 'ACTIVE',
+      // Phase 15: carry a wage worker's day-rate model onto their "venture 0" so the
+      // grounded wage survives the move to the portfolio model.
+      ...(p.wageProfile ? { wageProfile: { ...p.wageProfile } } : {}),
     };
   }
   if (p.monthlyIncome > 0) {

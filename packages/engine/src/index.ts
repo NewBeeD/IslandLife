@@ -80,6 +80,14 @@ export {
   STUDY_LOAN_MAX_TERM_MONTHS,
 } from './education';
 export {
+  isWageIndustry,
+  newWorkerWageProfile,
+  wageDailyRate,
+  wageMonthlyIncome,
+  wageSkillMultiplier,
+  refreshWageRates,
+} from './wages';
+export {
   resaleQuote,
   sellAssetNow,
   listAssetForSale,

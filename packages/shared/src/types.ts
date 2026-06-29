@@ -201,6 +201,19 @@ export interface Education {
   enrolled?: EnrolledProgram | null;
 }
 
+// ── The wage model (Phase 15) ────────────────────────────────────────────────
+// A wage worker's earnings are grounded in a day rate and the shape of a working
+// month, so the per-day figure and the banked monthly figure agree (idea 1). The
+// `dailyRate` is recomputed each month from the worker's skill, experience, tools,
+// and credentials (P15.2), within a realistic ceiling. Optional everywhere: an agent
+// or venture with no `wageProfile` keeps the spot/standing income model, so NPCs and
+// a non-wage player are byte-identical (the digest holds).
+export interface WageProfile {
+  dailyRate: number; // EC$/day — recomputed monthly from skill (P15.2)
+  workdaysPerMonth: number; // ~20 (5 days a week)
+  hoursPerDay: number; // ~8
+}
+
 // ── Ventures (Phase 8: the income spine) ─────────────────────────────────────
 // A concurrent income stream the player runs — a fishing boat, a minibus route, a
 // roadside juice stand — each with its own assets, output, operating cost, and
@@ -227,6 +240,11 @@ export interface Venture {
   // share). The player banks income × their own share (1 − Σ outside shares);
   // each holder is paid their slice. Undefined → a sole venture (byte-identical).
   equityHolders?: EquityHolder[];
+  // Phase 15: a wage-work venture (e.g. construction day labour) earns through the
+  // grounded day-rate model rather than spot/standing. When set, this venture's
+  // income is dailyRate × workdaysPerMonth, recomputed monthly from the player's
+  // skill. Undefined → the spot/standing model (byte-identical).
+  wageProfile?: WageProfile;
 }
 
 export interface NPCAgent {
@@ -325,6 +343,13 @@ export interface NPCAgent {
   // Optional. PATIENT sales the player has listed but not yet settled. Undefined for
   // NPCs and whenever nothing is listed, so the determinism digest holds.
   pendingSales?: PendingSale[];
+
+  // ── Phase 15: the wage model ────────────────────────────────────────────────
+  // Optional. Set on a single-stream wage worker (e.g. a construction labourer) so
+  // their income is the grounded day-rate model (dailyRate × workdays), recomputed
+  // monthly from skill. Undefined for NPCs and non-wage players (the digest holds).
+  // Once the player runs a venture portfolio, the wage moves onto its "venture 0".
+  wageProfile?: WageProfile;
 }
 
 export interface ActivePolicy {
@@ -378,7 +403,8 @@ export type OpportunityKind =
   | 'EDUCATION_ENROLMENT'
   | 'NEW_VENTURE'
   | 'CROWDFUND'
-  | 'PARTNERSHIP';
+  | 'PARTNERSHIP'
+  | 'SIDE_JOB';
 export type OpportunityStatus = 'OPEN' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
 
 // The hidden spec of a new-venture opportunity (Phase 10). Cross-domain entry: a
@@ -461,6 +487,17 @@ export interface PartnershipSpec {
   baseOperatingCosts: number; // EC$/month
 }
 
+// The hidden spec of a side-job opportunity (Phase 15, P15.3). An experienced wage
+// worker is offered independent, short-term paid work — a few days on a job, paid on
+// completion. `payout` is hidden mechanics; the player reads the offer in prose.
+export interface SideJobSpec {
+  id: string;
+  industry: Industry;
+  label: string; // player-facing: "a few days finishing a house in Soufrière"
+  payout: number; // EC$ paid on completion
+  days: number; // days of work the job runs
+}
+
 export interface Opportunity {
   id: string;
   kind: OpportunityKind;
@@ -481,6 +518,7 @@ export interface Opportunity {
   newVenture?: NewVentureSpec; // present for NEW_VENTURE opportunities (Phase 10)
   crowdfund?: CrowdfundSpec; // present for CROWDFUND opportunities (Phase 11)
   partnership?: PartnershipSpec; // present for PARTNERSHIP opportunities (Phase 11)
+  sideJob?: SideJobSpec; // present for SIDE_JOB opportunities (Phase 15)
 }
 
 // The logical identity of an offer — the (kind, target) it concerns, independent of
@@ -502,6 +540,8 @@ export function opportunityLogicalKey(opp: Opportunity): string {
       return `CROWDFUND:${opp.crowdfund?.ventureId ?? ''}`;
     case 'PARTNERSHIP':
       return `PARTNERSHIP:${opp.partnership?.partnerId ?? ''}:${opp.partnership?.id ?? ''}`;
+    case 'SIDE_JOB':
+      return `SIDE_JOB:${opp.sideJob?.id ?? ''}`;
   }
 }
 
@@ -547,6 +587,7 @@ export interface DecisionOption {
     enrol?: boolean;
     funding?: BackerOffer; // CROWDFUND — the backer offer this option takes
     accept?: boolean; // PARTNERSHIP — true on the "go in" option
+    sideJobPayout?: number; // SIDE_JOB — EC$ paid on completion of the "take it" option
   };
 }
 

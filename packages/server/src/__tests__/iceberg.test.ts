@@ -25,6 +25,7 @@ import {
   toFinancingQuoteDTO,
   toMoneyDTO,
   toOpportunitiesDTO,
+  toSkillsDTO,
   toStateDTO,
 } from '../projection';
 
@@ -131,6 +132,8 @@ describe('iceberg-leak contract (P-X1)', () => {
         assertNoLeak('feed', toFeedDTO(world.month, entries));
         assertNoLeak('community', toCommunityDTO(world));
         assertNoLeak('opportunities', toOpportunitiesDTO(world));
+        // The skills view is qualitative prose — no raw skill/capital scores (S3).
+        assertNoLeak('skills', toSkillsDTO(world));
       }
     });
   }
@@ -267,6 +270,27 @@ describe('iceberg-leak contract (P-X1)', () => {
     expect(typeof money.netWorth).toBe('number');
     // The money DTO may carry these, but the global iceberg tokens still must not.
     assertNoLeak('money', money, { allowFinancial: true });
+  });
+
+  it('the skills view shows earned trades and a wage day rate, leaking no scores (Phase 15)', () => {
+    // A construction worker who has built up the trade: the skills view names the
+    // trades they can do (as bands, not numbers), their credential, and their current
+    // day rate (their own money fact) — and leaks none of the hidden 0–1 scores.
+    const world = buildWorld(21, { population: 60, choices: CHOICES });
+    const p = world.player;
+    p.occupation = 'CONSTRUCTION';
+    p.employmentStatus = 'SELF_EMPLOYED';
+    p.wageProfile = { dailyRate: 118, workdaysPerMonth: 20, hoursPerDay: 8 };
+    p.experience.construction = 0.6;
+    p.knowledge.construction = 0.5;
+    p.education = { level: 'CERTIFICATE', enrolled: null };
+
+    const skills = toSkillsDTO(world);
+    expect(skills.trades.some((t) => t.label === 'Construction')).toBe(true);
+    expect(skills.credential).toContain('certificate');
+    expect(skills.wage?.dailyRate).toBe(118);
+    expect(skills.wage?.perMonth).toBe(2360);
+    assertNoLeak('skills', skills);
   });
 
   it('asset sale and collateral DTOs leak no hidden mechanics (Phase 12)', () => {

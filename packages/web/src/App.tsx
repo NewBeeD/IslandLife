@@ -4,6 +4,7 @@ import type {
   FeedEntryDTO,
   MoneyDTO,
   OpportunitiesDTO,
+  SkillsDTO,
   StateDTO,
 } from '@island/shared';
 import { api, type CreationChoicesInput } from './api/client';
@@ -12,8 +13,9 @@ import { Community } from './views/Community';
 import { DailyLife } from './views/DailyLife';
 import { Money } from './views/Money';
 import { Opportunities } from './views/Opportunities';
+import { Skills } from './views/Skills';
 
-type View = 'daily' | 'community' | 'money' | 'opportunities';
+type View = 'daily' | 'community' | 'money' | 'opportunities' | 'skills';
 
 // The current life is auto-saved every month server-side; we remember which save it
 // is here so the player can close the tab and pick up exactly where they left off.
@@ -27,23 +29,26 @@ export function App() {
   const [money, setMoney] = useState<MoneyDTO | null>(null);
   const [community, setCommunity] = useState<CommunityDTO | null>(null);
   const [opportunities, setOpportunities] = useState<OpportunitiesDTO | null>(null);
+  const [skills, setSkills] = useState<SkillsDTO | null>(null);
   const [busy, setBusy] = useState(false);
   const [resuming, setResuming] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async (id: string) => {
-    const [s, f, m, c, o] = await Promise.all([
+    const [s, f, m, c, o, k] = await Promise.all([
       api.state(id),
       api.feed(id),
       api.money(id),
       api.community(id),
       api.opportunities(id),
+      api.skills(id),
     ]);
     setState(s);
     setFeed(f.entries);
     setMoney(m);
     setCommunity(c);
     setOpportunities(o);
+    setSkills(k);
   }, []);
 
   // On first load, resume the stored save if there is one. A stale id (e.g. the save
@@ -159,6 +164,9 @@ export function App() {
         <button className={view === 'money' ? 'active' : ''} onClick={() => setView('money')}>
           Money
         </button>
+        <button className={view === 'skills' ? 'active' : ''} onClick={() => setView('skills')}>
+          Skills
+        </button>
         <button
           className={view === 'opportunities' ? 'active' : ''}
           onClick={() => setView('opportunities')}
@@ -174,6 +182,7 @@ export function App() {
         {view === 'money' && money && (
           <Money money={money} saveId={saveId} onChanged={() => refresh(saveId)} />
         )}
+        {view === 'skills' && skills && <Skills skills={skills} />}
         {view === 'opportunities' && opportunities && (
           <Opportunities
             saveId={saveId}

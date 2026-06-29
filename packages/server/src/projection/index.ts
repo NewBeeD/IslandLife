@@ -8,6 +8,7 @@ export { toMoneyDTO } from './money';
 export { toFeedDTO } from './feed';
 export { toCommunityDTO } from './community';
 export { toOpportunitiesDTO } from './opportunities';
+export { toSkillsDTO } from './skills';
 export { toDecisionDTO, toFinancingQuoteDTO } from './decisions';
 export {
   toAssetSaleResultDTO,
