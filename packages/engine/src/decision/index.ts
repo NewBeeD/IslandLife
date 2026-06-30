@@ -19,3 +19,5 @@ export type { Archetype, ArchetypeTraits } from './archetype';
 export type { ActionTag } from '@island/shared';
 export { tagOf } from './tags';
 export { recordObservation, learnedBias, MEMORY_CAPACITY } from './memory';
+export { irrationalBias, marketMood, marketHeat, personalRun } from './irrational';
+export type { MarketMood, IrrationalTraits } from './irrational';
