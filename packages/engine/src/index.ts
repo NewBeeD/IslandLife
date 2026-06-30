@@ -21,7 +21,15 @@ export {
   computeCompanyRevenue,
   checkCompanySolvency,
   applyClosureCascade,
+  formCompany,
+  newFirmEconomics,
+  competitionFactor,
+  foundedRivalsInCell,
+  isFoundedFirm,
+  FOUNDABLE_INDUSTRIES,
+  NEW_FIRM_ENTRY_COST,
 } from './company';
+export type { FirmEconomics } from './company';
 export { rollRandomEvents } from './events';
 export { governmentAct, computeTaxRevenue } from './government';
 export { computeLegacyIncrement, netWorthOf } from './legacy';

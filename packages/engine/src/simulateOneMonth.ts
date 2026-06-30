@@ -33,7 +33,13 @@ export function simulateOneMonth(world: WorldState): WorldState {
   // PHASE 3: company revenue
   for (const company of world.companies) {
     if (company.status === 'CLOSED') continue;
-    company.monthlyRevenue = computeCompanyRevenue(company, world.markets, world.events, world.goods);
+    company.monthlyRevenue = computeCompanyRevenue(
+      company,
+      world.markets,
+      world.events,
+      world.goods,
+      world.companies,
+    );
   }
 
   // PHASE 4: costs, solvency, closure cascade
