@@ -19,6 +19,7 @@ import {
 import { rollRandomEvents } from './events';
 import { governmentAct } from './government';
 import { injectSystemicShock, macroLendingAppetiteFactor, recomputeMacro } from './macro';
+import { supplyChainCostMultiplier } from './supply';
 import { applyCompetitivePricePressure } from './competition';
 import { chargeTuition } from './education';
 import { computeLegacyIncrement } from './legacy';
@@ -88,7 +89,13 @@ export function simulateOneMonth(world: WorldState): WorldState {
     // the surplus available to labour, and it drives solvency exactly as before. A
     // seed firm's `baseOperatingCosts` still folds in its established-economy payroll
     // (Phase 1 simplification; Phase 20 reconciles incumbent payroll cash-for-cash).
-    const operatingCosts = company.baseOperatingCosts * (1 + eventLoad * 0.05);
+    // Phase 23: scarce inputs lift the cost line in proportion to the trade's supply-
+    // chain fragility (a boom or a severed route bites a fragile, import-heavy trade
+    // hardest, barely touches a raw one). The macro read is last month's state — the
+    // same one-month lag the market prices above take. A multiplier of 1 in calm times,
+    // so a firm in a settled economy is byte-identical to the pre-P23 cost model.
+    const scarcity = supplyChainCostMultiplier(world.macro, company.industry);
+    const operatingCosts = company.baseOperatingCosts * (1 + eventLoad * 0.05) * scarcity;
 
     company.profit = company.monthlyRevenue - loanPayments - operatingCosts;
     company.consecutiveLossMonths = company.profit < 0 ? company.consecutiveLossMonths + 1 : 0;
@@ -135,8 +142,10 @@ export function simulateOneMonth(world: WorldState): WorldState {
     const spending = monthlyConsumption(income, agent.monthlyLivingCosts);
     // Fuel/upkeep on owned equipment (Phase 7) — 0 for everyone without an upgrade,
     // so NPC and default-player cash math is unchanged (the digest holds). Phase 8:
-    // a venture portfolio sums upkeep across its ventures (still 0 for NPCs).
-    const operating = totalOperatingCosts(agent);
+    // a venture portfolio sums upkeep across its ventures (still 0 for NPCs). Phase 23:
+    // this month's scarce-input squeeze rides the upkeep, by each trade's chain
+    // fragility — 0 stays 0 for NPCs, and a calm economy is byte-identical.
+    const operating = totalOperatingCosts(agent, world.macro);
     // Tuition while enrolled (Phase 9) — a real monthly drain; 0 for everyone not
     // studying, so NPC/default-player cash math is unchanged (the digest holds).
     const tuition = chargeTuition(agent);

@@ -11,6 +11,7 @@ import {
   operatorCutShare,
   playerShareOf,
   resaleQuote,
+  supplyChainCostMultiplier,
   ventureGrossIncome,
   ventureIncomeLines,
   ventureOperatingCostLines,
@@ -113,6 +114,14 @@ function buildMarketMood(world: WorldState): string | undefined {
   if (m.systemicStress > 0.12 || m.creditAvailability < 0.45 || rateSpread > 0.05) {
     return 'Money is tight across the island this season — the banks are lending cautiously.';
   }
+  // Phase 23: scarce inputs — a boom bidding up fuel, materials and skilled hands, or a
+  // route cut leaving trades short. Surfaced as prose, never the raw pressure figure (S3).
+  if ((m.supplyDisruption ?? 0) > 0.2) {
+    return 'A road or a route is cut somewhere — goods are moving slow and the things a trade needs cost more this season.';
+  }
+  if ((m.inputCostPressure ?? 1) > 1.12) {
+    return 'Everything a trade runs on — fuel, materials, a skilled hand — is dearer this season; the island is bidding for the same scarce inputs.';
+  }
   if (m.aggregateDemand > 1.15 && m.businessConfidence > 0.6) {
     return 'Trade is brisk around the island — buyers are out and the money is moving.';
   }
@@ -132,7 +141,14 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
   const p = world.player;
   const activeLoans = p.loans.filter((l) => l.status === 'ACTIVE');
   const loanPayments = activeLoans.reduce((s, l) => s + l.monthlyPayment, 0);
-  const operatingCosts = p.monthlyOperatingCosts ?? 0;
+  // Phase 23: a single-stream player's fuel/upkeep carries this month's scarce-input
+  // squeeze, by their occupation's supply-chain fragility — matching the engine's cash
+  // math. Byte-identical (multiplier 1) in a calm economy or for a player with no trade.
+  const rawOperating = p.monthlyOperatingCosts ?? 0;
+  const operatingCosts =
+    rawOperating > 0 && p.occupation
+      ? rawOperating * supplyChainCostMultiplier(world.macro, p.occupation)
+      : rawOperating;
 
   // Income: a venture portfolio shows one line per active venture (they sum to the
   // player's monthly income); the single-stream player shows one occupation/wage
@@ -185,7 +201,7 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
   const job = p.currentJob;
   if (portfolio) {
     // Shared assets de-duplicated, shelved ventures at reduced upkeep (Phase 17).
-    for (const l of ventureOperatingCostLines(p)) {
+    for (const l of ventureOperatingCostLines(p, world.macro)) {
       if (job && l.ventureId === JOB_VENTURE_ID) continue; // shown as itemized job costs below
       if (l.amount >= 1) {
         const label = l.shelved ? `Upkeep (${l.label}, shelved)` : `Fuel and upkeep (${l.label})`;
@@ -276,7 +292,7 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
   // The player's ventures the view can act on (Phase 17): wind down, shelve, reopen.
   // The job venture (Phase 16 employment) is not a discretionary venture, so it is not
   // listed here. Closed ventures drop off. No hidden mechanics — just labels & money.
-  const upkeepById = new Map(ventureOperatingCostLines(p).map((l) => [l.ventureId, l.amount]));
+  const upkeepById = new Map(ventureOperatingCostLines(p, world.macro).map((l) => [l.ventureId, l.amount]));
   const ventures: VentureLineDTO[] = portfolio
     ? (p.ventures ?? [])
         .filter((v) => v.status !== 'CLOSED' && v.id !== JOB_VENTURE_ID)

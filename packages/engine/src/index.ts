@@ -49,8 +49,16 @@ export {
   macroInterestRate,
   macroCreditMultiplier,
   macroLendingAppetiteFactor,
+  macroInputCostPressure,
   injectSystemicShock,
 } from './macro';
+export {
+  supplyChainFragility,
+  supplyChainCostMultiplier,
+  inputsAreScarce,
+  SUPPLY_CHAIN_FRAGILITY,
+} from './supply';
+export { SUPPLY_DISRUPTION_EVENT_IDS } from './events';
 export { governmentAct, computeTaxRevenue } from './government';
 export {
   updateReputation,

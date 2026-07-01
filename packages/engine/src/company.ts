@@ -195,6 +195,7 @@ export function newFirmEconomics(
   industry: Industry,
   parish: string,
   rivalPerception = 1,
+  costMultiplier = 1,
 ): FirmEconomics {
   const goodId = REPRESENTATIVE_GOOD[industry];
   const good = goodId ? world.goods.find((g) => g.id === goodId) : undefined;
@@ -211,11 +212,17 @@ export function newFirmEconomics(
   // many of them as their optimism lets them see.
   const rivals = foundedRivalsInCell(world.companies, industry, parish) * rivalPerception;
   const revenue = price * outputUnits * competitionFactor(rivals);
+  // Phase 23: the founder reckons on this month's scarce-input cost, so a boom's higher
+  // input prices thin the projected margin and gate expansion (fewer firms found when
+  // inputs are dear) — the "a boom throttles everyone's growth" edge on the birth side.
+  // The STORED baseOperatingCosts stays the fixed figure; scarcity is applied live each
+  // month (simulateOneMonth), never baked into the firm. costMultiplier 1 → unchanged.
+  const projectedOperating = NEW_FIRM_OPERATING_COSTS * costMultiplier;
   return {
     outputUnits,
     baseOperatingCosts: NEW_FIRM_OPERATING_COSTS,
     entryCost: NEW_FIRM_ENTRY_COST,
-    expectedMonthlyProfit: revenue - NEW_FIRM_OPERATING_COSTS,
+    expectedMonthlyProfit: revenue - projectedOperating,
   };
 }
 

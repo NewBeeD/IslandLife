@@ -1,5 +1,6 @@
 import type { MacroState, WorldState } from '@island/shared';
 import { clamp, clamp01 } from './rng';
+import { SUPPLY_DISRUPTION_EVENT_IDS } from './events';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PHASE 20 — the economic web (systemic interaction, #26).
@@ -36,6 +37,20 @@ const CREDIT_BASELINE = 0.7; // creditAvailability at rest (0–1)
 
 // A systemic-credit shock (P20.3) decays back to calm at this rate per month.
 const STRESS_DECAY = 0.7;
+
+// ── Scarce inputs & logistics (Phase 23) ─────────────────────────────────────
+// A logistics/route shock (P23.2) decays back to calm at this rate per month once the
+// event that caused it has passed (while it is live it is held at the event severity).
+const DISRUPTION_DECAY = 0.6;
+// How a boom and an active disruption bid up the cost of scarce inputs (P23.1). Kept
+// modest so the squeeze throttles growth without strangling it. The input-cost
+// multiplier rises above 1 with pressure; it never falls below 1 (scarcity is a cost,
+// not a discount), so a calm or slack economy is byte-identical to the pre-P23 model.
+const SCARCITY_DEMAND_W = 0.35; // per unit of aggregate demand above 1.0
+const SCARCITY_CONSTR_W = 0.25; // per unit of construction activity above 1.0
+const SCARCITY_DISRUPT_W = 0.4; // per unit of active supply disruption
+const INPUT_COST_MIN = 1.0;
+const INPUT_COST_MAX = 1.6;
 
 // ── Weights on the feedback edges ────────────────────────────────────────────
 // Kept small so the variables stay in band and the loop damps rather than explodes.
@@ -100,7 +115,20 @@ export function initialMacroState(baseInterestRate: number): MacroState {
     businessConfidence: 0.5,
     consumerConfidence: 0.5,
     systemicStress: 0,
+    inputCostPressure: 1,
+    supplyDisruption: 0,
   };
+}
+
+// The worst active logistics/route disruption this month (P23.2): the severity of the
+// most severe live choke-point event, or 0 when none is running. Read by recomputeMacro
+// to hold supplyDisruption up while a route is cut, then let it decay once it reopens.
+function activeSupplyDisruption(world: WorldState): number {
+  let worst = 0;
+  for (const e of world.events) {
+    if (SUPPLY_DISRUPTION_EVENT_IDS.has(e.definitionId) && e.severity > worst) worst = e.severity;
+  }
+  return clamp01(worst);
 }
 
 // Recompute the macro state for the month from last month's state and this month's
@@ -167,6 +195,28 @@ export function recomputeMacro(world: WorldState): MacroState {
   );
   const businessConfidence = clamp01(lerp(m.businessConfidence, businessTarget, MOVE));
 
+  // Supply disruption (P23.2): held at the worst live choke-point event's severity while
+  // a route is cut, decaying toward calm once it reopens — the same injected-then-decays
+  // shape as systemic stress. 0 when no route event is running.
+  const supplyDisruption = clamp01(
+    Math.max(m.supplyDisruption * DISRUPTION_DECAY, activeSupplyDisruption(world)),
+  );
+
+  // Scarce-input cost pressure (P23.1): a boom in demand and construction bids up the
+  // finite inputs everyone competes for (fuel, skilled hands, materials), and an active
+  // disruption tightens the screw further. Centered on 1.0 and never below it, so it is
+  // a cost the whole island carries in a boom, easing back as the heat comes off.
+  const inputTarget =
+    1 +
+    SCARCITY_DEMAND_W * Math.max(0, aggregateDemand - 1) +
+    SCARCITY_CONSTR_W * Math.max(0, constructionActivity - 1) +
+    SCARCITY_DISRUPT_W * supplyDisruption;
+  const inputCostPressure = clamp(
+    lerp(m.inputCostPressure, inputTarget, MOVE),
+    INPUT_COST_MIN,
+    INPUT_COST_MAX,
+  );
+
   m.effectiveInterestRate = effectiveInterestRate;
   m.creditAvailability = creditAvailability;
   m.aggregateDemand = aggregateDemand;
@@ -174,6 +224,8 @@ export function recomputeMacro(world: WorldState): MacroState {
   m.businessConfidence = businessConfidence;
   m.consumerConfidence = consumerConfidence;
   m.systemicStress = systemicStress;
+  m.inputCostPressure = inputCostPressure;
+  m.supplyDisruption = supplyDisruption;
   return m;
 }
 
@@ -208,6 +260,14 @@ export function macroCreditMultiplier(macro: MacroState): number {
 // appetite (P20.3): 1 in calm times, falling toward ~0.3 at peak stress.
 export function macroLendingAppetiteFactor(macro: MacroState): number {
   return clamp01(1 - 0.7 * macro.systemicStress);
+}
+
+// The scarce-input cost pressure the island carries this month (Phase 23.1) — a
+// multiplier ≥ 1 on the cost of the inputs a trade consumes. 1 in calm times, so a
+// caller that scales operating costs by it is byte-identical until a boom or a
+// disruption actually bids the inputs up. A pre-P23 snapshot (no field) reads as 1.
+export function macroInputCostPressure(macro: MacroState): number {
+  return Math.max(1, macro.inputCostPressure ?? 1);
 }
 
 // Inject a systemic-credit shock (P20.3): raise systemic stress to at least `magnitude`

@@ -634,6 +634,21 @@ export interface MacroState {
   // creditAvailability down and the rate spread up across every bank, turning an
   // isolated failure into a possible island-wide crunch. 0 in normal times.
   systemicStress: number;
+  // ── Supply chains, logistics & scarcity (Phase 23) ─────────────────────────
+  // The aggregate cost of scarce inputs — fuel, skilled hands, imported materials —
+  // as a multiplier centered on 1.0. A boom bids them up (aggregate demand and
+  // construction competing for the same finite inputs) and an active supply
+  // disruption lifts it further; a slump relaxes it. It feeds firm and venture
+  // operating costs (a fragile, processed chain feels it most, Phase 23.3) and gates
+  // expansion — so a boom throttles everyone's growth, not just the player's (A13).
+  // Exactly 1.0 at rest, so a calm economy is byte-identical to the pre-Phase-23 cost
+  // model. Modelled in the AGGREGATE (S8) — never a per-shipment simulation.
+  inputCostPressure: number;
+  // A transient logistics/route shock, 0–1, that spikes while a choke-point event (a
+  // flood or landslide cutting a route, Phase 23.2) is live and decays back to 0 over
+  // months. While elevated it lifts input-cost pressure island-wide — the logistics
+  // squeeze a severed route puts on everyone who moves goods. 0 in normal times.
+  supplyDisruption: number;
 }
 
 export interface LegacyScore {

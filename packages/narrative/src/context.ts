@@ -37,6 +37,10 @@ export interface MonthContext {
   // state; `tradeCrowded` reads a competitive scrum crowding the player's own trade.
   creditTight: boolean;
   tradeCrowded: boolean;
+  // Supply chains & scarcity (Phase 23): scarce inputs are biting — a boom has bid up
+  // fuel/materials/skilled hands, or a route is cut — felt as a qualitative squeeze,
+  // never the raw multiplier (the iceberg, S3).
+  inputsScarce: boolean;
   rand: () => number; // deterministic in (seed, month); never touches world.rng
 }
 
@@ -114,6 +118,10 @@ export function buildContext(world: WorldState): MonthContext {
       ).length
     : 0;
   const tradeCrowded = foundedRivals >= 3;
+  // Scarce inputs biting (Phase 23): a boom bidding up finite inputs, or a route cut —
+  // read qualitatively off the macro state, never the raw multiplier (S3). Tolerant of a
+  // pre-P23 macro (the fields default to calm).
+  const inputsScarce = (macro.inputCostPressure ?? 1) > 1.12 || (macro.supplyDisruption ?? 0) > 0.2;
 
   const rand = mulberry32((Math.imul(world.seed >>> 0, 2654435761) + month * 40503) >>> 0);
 
@@ -137,6 +145,7 @@ export function buildContext(world: WorldState): MonthContext {
     cashAfterPayment: player.cash - loanPayment,
     creditTight,
     tradeCrowded,
+    inputsScarce,
     rand,
   };
 }

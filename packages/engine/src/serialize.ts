@@ -37,11 +37,13 @@ export interface SerializedWorld {
   // world gained a derived `macro` state. v4 (Phase 21): the player gained an optional
   // `reputation` ledger and ventures an optional `customerReputation` demand memory. v5
   // (Phase 22): the player gained an optional `information` ledger (paid research depth &
-  // a competitor scout). All additive — an older snapshot simply lacks them and
-  // deserializes to the neutral defaults (an empty ring, a baseline macro, a neutral
-  // ledger built on first tick, a whole customer name, no paid information), so the
-  // migration path stays implicit (P-X4).
-  schemaVersion: 5;
+  // a competitor scout). v6 (Phase 23): the macro state gained `inputCostPressure` &
+  // `supplyDisruption` (scarce inputs & logistics). All additive — an older snapshot
+  // simply lacks them and deserializes to the neutral defaults (an empty ring, a baseline
+  // macro, a neutral ledger built on first tick, a whole customer name, no paid
+  // information, calm inputs at pressure 1.0), so the migration path stays implicit
+  // (P-X4). The macro is derived and recomputed on the first tick regardless.
+  schemaVersion: 6;
   seed: number;
   month: number;
   rngState: RngState;
@@ -66,6 +68,19 @@ export interface SerializedWorld {
 
 const clone = <T>(x: T): T => structuredClone(x);
 
+// Restore the macro state from a snapshot, filling the neutral baseline for a snapshot
+// written before the macro web (Phase 20) existed, and backfilling the Phase 23 scarcity
+// fields for a v5 snapshot that predates them. All are recomputed on the first tick, so
+// this only guarantees soundness in the window before that.
+function restoreMacro(macro: MacroState | undefined, baseInterestRate: number): MacroState {
+  const base = initialMacroState(baseInterestRate);
+  if (!macro) return base;
+  const m = clone(macro);
+  m.inputCostPressure ??= base.inputCostPressure;
+  m.supplyDisruption ??= base.supplyDisruption;
+  return m;
+}
+
 export function serializeWorld(world: WorldState): SerializedWorld {
   const agents: SerializedAgent[] = world.agents.map((a) => {
     const { employer, ...rest } = a;
@@ -77,7 +92,7 @@ export function serializeWorld(world: WorldState): SerializedWorld {
   });
 
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     seed: world.seed,
     month: world.month,
     rngState: world.rng.serialize(),
@@ -152,8 +167,10 @@ export function deserializeWorld(s: SerializedWorld): WorldState {
     government: clone(s.government),
     events: clone(s.events),
     // Phase 20: default to the neutral baseline for snapshots written before the macro
-    // web existed; it is recomputed from aggregates on the first tick regardless.
-    macro: s.macro ? clone(s.macro) : initialMacroState(s.country.baseInterestRate),
+    // web existed; it is recomputed from aggregates on the first tick regardless. Phase
+    // 23: a v5 macro lacks the scarcity fields — backfill the calm defaults so they are
+    // sound before the first tick recomputes them.
+    macro: restoreMacro(s.macro, s.country.baseInterestRate),
     playerLegacy: clone(s.playerLegacy),
     playerNotifications: clone(s.playerNotifications),
     // Default for snapshots written before Phase 6 added these fields.

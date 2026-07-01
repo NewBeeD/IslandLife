@@ -101,6 +101,11 @@ const GLOBAL_TOKENS = [
   // as ranges, never these raw numbers (S3). The DTO carries prose + low/high bounds.
   'researchLevel',
   'scoutedUntilMonth',
+  // supply chains & scarcity (Phase 23) — the macro web's scarce-input pressure and
+  // logistics-disruption stress are derived internals; the player reads the squeeze as
+  // prose (the market mood), never these raw multipliers (S3).
+  'inputCostPressure',
+  'supplyDisruption',
   // legacy (hidden until death)
   'legacyScore',
   'wealthScore',

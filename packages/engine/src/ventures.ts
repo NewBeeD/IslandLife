@@ -14,6 +14,7 @@ import type {
   Asset,
   BarrierTier,
   Industry,
+  MacroState,
   NPCAgent,
   ParishId,
   Venture,
@@ -21,6 +22,7 @@ import type {
   WorldState,
 } from '@island/shared';
 import { clamp } from './rng';
+import { supplyChainCostMultiplier } from './supply';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PHASE 8 — the venture portfolio (the income spine).
@@ -184,14 +186,20 @@ export function aggregateVentureIncome(world: WorldState): number {
 // line, two trucks → two (P17.2, idea 15). Venture-level operating costs (a juice
 // stand's fruit & sugar, which are not tied to one asset) add on top. A shelved
 // venture pays only a fraction of its upkeep, the work having stopped (P17.4).
+// Phase 23: when `macro` is supplied, each line's upkeep is scaled by its trade's
+// scarce-input cost multiplier (a fragile, import-heavy chain feels a boom/disruption
+// most). Omitting `macro` — or a calm economy — leaves the amounts byte-identical, so
+// the pre-P23 path and every existing test are untouched.
 export function ventureOperatingCostLines(
   agent: NPCAgent,
+  macro?: MacroState,
 ): { ventureId: string; label: string; amount: number; shelved: boolean }[] {
   const lines: { ventureId: string; label: string; amount: number; shelved: boolean }[] = [];
   const seenAssets = new Set<string>();
   for (const v of agent.ventures ?? []) {
     if (v.status === 'CLOSED') continue;
     const factor = v.status === 'SHELVED' ? SHELVED_UPKEEP_FACTOR : 1;
+    const scarcity = supplyChainCostMultiplier(macro, v.industry);
     let amount = v.monthlyOperatingCosts;
     for (const a of v.assets) {
       if (a.monthlyUpkeep != null && !seenAssets.has(a.id)) {
@@ -202,7 +210,7 @@ export function ventureOperatingCostLines(
     lines.push({
       ventureId: v.id,
       label: v.label,
-      amount: Math.round(amount * factor),
+      amount: Math.round(amount * factor * scarcity),
       shelved: v.status === 'SHELVED',
     });
   }
@@ -211,12 +219,16 @@ export function ventureOperatingCostLines(
 
 // Total monthly operating costs for an agent — summed across its ventures with shared
 // assets de-duplicated (P17.2), else the single-stream field (0 for NPCs → digest
-// unchanged).
-export function totalOperatingCosts(agent: NPCAgent): number {
+// unchanged). Phase 23: with `macro` supplied the costs carry this month's scarce-input
+// squeeze — venture upkeep by each trade's chain fragility, the single-stream field by
+// the player's occupation. Byte-identical without `macro` or in a calm economy.
+export function totalOperatingCosts(agent: NPCAgent, macro?: MacroState): number {
   if (hasVentures(agent)) {
-    return ventureOperatingCostLines(agent).reduce((s, l) => s + l.amount, 0);
+    return ventureOperatingCostLines(agent, macro).reduce((s, l) => s + l.amount, 0);
   }
-  return agent.monthlyOperatingCosts ?? 0;
+  const base = agent.monthlyOperatingCosts ?? 0;
+  if (base === 0 || !macro || !agent.occupation) return base;
+  return Math.round(base * supplyChainCostMultiplier(macro, agent.occupation));
 }
 
 // ── Materializing the implicit "venture 0" (Phase 10) ────────────────────────

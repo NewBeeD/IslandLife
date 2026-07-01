@@ -17,6 +17,7 @@ import {
   type FirmEconomics,
 } from './company';
 import { competitiveEntryDraw } from './competition';
+import { supplyChainCostMultiplier } from './supply';
 import { clamp } from './rng';
 
 export type Action =
@@ -146,7 +147,10 @@ function startBusinessCandidate(
   // fate, so entry keeps coming until the fat cell is competed back to ordinary.
   let best: { industry: Industry; econ: FirmEconomics; perceived: number } | null = null;
   for (const industry of FOUNDABLE_INDUSTRIES) {
-    const econ = newFirmEconomics(world, industry, agent.parish, FOUNDER_OPTIMISM);
+    // Phase 23: the founder prices in this month's scarce-input cost for the trade, so a
+    // boom's dear inputs gate expansion (a fragile chain is dearer to stand up into).
+    const scarcity = supplyChainCostMultiplier(world.macro, industry);
+    const econ = newFirmEconomics(world, industry, agent.parish, FOUNDER_OPTIMISM, scarcity);
     const perceived =
       econ.expectedMonthlyProfit * competitiveEntryDraw(world, industry, agent.parish);
     if (!best || perceived > best.perceived) {

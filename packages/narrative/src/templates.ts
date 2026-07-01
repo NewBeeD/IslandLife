@@ -253,6 +253,18 @@ export const WEB_TEMPLATES: Template[] = [
       `pockets, and the wharf feels tighter for it. It is the way of a good thing: let it be seen ` +
       `to pay and others come running to do the same. You hold your corner and watch them come.`,
   },
+  {
+    id: 'SUPPLY_SQUEEZE',
+    type: 'OBSERVATION',
+    weight: 1,
+    match: (c) => c.inputsScarce,
+    render: (c) =>
+      `The cost of everything a trade needs has crept up this season. Fuel, materials, a skilled ` +
+      `pair of hands — all dearer than they were, the boats and trucks that bring goods into ` +
+      `${c.parishName} running short or running late. What you sell has not moved much, but what ` +
+      `it costs you to work has, and the difference comes straight off the top. The ones who kept ` +
+      `a little put by, or who never leaned hard on things brought from far, feel it least.`,
+  },
 ];
 
 // ── Flavor: season and community texture, so a quiet month still reads as a life
