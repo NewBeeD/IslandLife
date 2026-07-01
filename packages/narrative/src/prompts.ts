@@ -113,6 +113,26 @@ What went differently than expected. What the player now
 understands that they did not understand before they started.`
       );
 
+    case 'REPUTATION_SHIFT': {
+      const gained = trigger.data.direction === 'GAINED';
+      return (
+        base +
+        `
+TRIGGER: The player's standing has crossed a threshold ${gained ? 'upward' : 'downward'}.
+${
+  gained
+    ? 'People have come to trust the player — a name built slowly, over a clean record. The bank deals with them more easily now; better hands want to work for them; bigger jobs come their way.'
+    : 'The player has broken faith on money — a default, a debt not honoured. The bank remembers. Terms come dearer; people who deal with them are warier; the shadow of it will hang about for a long time.'
+}
+
+Write a short narrative entry about the world's changed regard for the player.
+Not a number, not a score — the felt texture of it: how a person is treated
+differently once their name has ${gained ? 'grown' : 'taken a knock'}. A specific small
+moment that shows it. Do not resolve or moralize — standing is slow to build and
+slow to mend, and the entry should sit in the present of it.`
+      );
+    }
+
     case 'ANNUAL_REFLECTION':
       return (
         base +

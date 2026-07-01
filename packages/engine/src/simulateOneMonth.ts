@@ -23,8 +23,16 @@ import { applyCompetitivePricePressure } from './competition';
 import { chargeTuition } from './education';
 import { computeLegacyIncrement } from './legacy';
 import { updateMarketPrice } from './market';
-import { activeVentures, distributeVentureEquity, hasVentures, totalOperatingCosts } from './ventures';
+import {
+  activeVentures,
+  distributeVentureEquity,
+  hasVentures,
+  recoverVentureReputations,
+  rollVentureScandal,
+  totalOperatingCosts,
+} from './ventures';
 import { distributePartnershipProfit, strainFriendDefaults } from './funding';
+import { updateReputation } from './reputation';
 import { repossessCollateral, resolvePendingSales } from './assets';
 
 // Consecutive unmet-payment months before the player's loans fall into default
@@ -172,6 +180,20 @@ export function simulateOneMonth(world: WorldState): WorldState {
   repossessCollateral(world);
   distributeVentureEquity(world);
   distributePartnershipProfit(world);
+
+  // PHASE 5c (Phase 21): the reputation ledger. Recompute the player's standing now that
+  // this month's defaults, friend-strain, and broken contracts are settled but before
+  // Phase 7 writes defaulted debt off (so a fresh default is still on the book to be
+  // seen). One default tanks financial reliability; a clean-servicing month builds it
+  // slowly; every band eases back toward neutral over years. Pure of rng — a no-op on the
+  // seed stream, so the no-reputation-event baseline digest holds (S2). The player only.
+  updateReputation(world);
+  // Phase 21 (A19 — markets remember): a rare scandal on a consumer-facing player venture
+  // cuts its customer demand sharply; every venture's demand memory recovers toward whole
+  // only slowly. Gated on the player actually running an eligible venture, so no rng is
+  // drawn — and nothing moves — for a player without one (the digest holds).
+  recoverVentureReputations(world);
+  rollVentureScandal(world);
 
   // PHASE 6: NPC decisions
   for (const agent of world.agents) {

@@ -22,4 +22,4 @@ And also, I should be able to sell land that I own or lease it.
 
 10) Can you fix the Fuel and Upkeep issue. One vehicle may be enough to meet the demands of all the ventures. So when it is not the case, then you should point that out, and as an upgrade to meet the demands, you can have purchase of a vehicle as an upgrade.
 
-11)
+11) When I pause the skills training, the tuition is still paid. which makes no sense. 

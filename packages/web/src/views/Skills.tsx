@@ -4,13 +4,20 @@ import type { SkillsDTO } from '@island/shared';
 // years, their formal credential, and (for a wage worker) their current day rate.
 // Qualitative prose, not numbers — the underlying skill scores never cross the wire.
 export function Skills({ skills }: { skills: SkillsDTO }) {
-  const { headline, credential, trades, wage } = skills;
+  const { headline, credential, trades, wage, standing } = skills;
 
   return (
     <div className="skills">
       <section className="skills__headline">
         <p className="skills__headline-text">{headline}</p>
       </section>
+
+      {standing && (
+        <section className="skills__standing">
+          <h3>Your standing</h3>
+          <p className="muted">{standing}</p>
+        </section>
+      )}
 
       {wage && (
         <section className="skills__wage">

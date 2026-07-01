@@ -250,6 +250,13 @@ export function Money({
         </section>
       )}
 
+      {money.standing && (
+        <section className="money__section">
+          <h3>Your name</h3>
+          <p className="money__note muted">{money.standing}</p>
+        </section>
+      )}
+
       <div className="money__networth">
         <span>Net worth</span>
         <strong>{ec(money.netWorth)}</strong>

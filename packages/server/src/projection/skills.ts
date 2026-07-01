@@ -10,6 +10,7 @@ import type {
 } from '@island/shared';
 import { activeVentures, credentialLevelOf, hasVentures, wageMonthlyIncome } from '@island/engine';
 import { OCCUPATION_LABEL } from './labels';
+import { workStandingProse } from './standing';
 
 // GET /saves/:id/skills — the Skills view (Phase 15, P15.4). The trades the player
 // has built up over the years, their formal credential, and (for a wage worker)
@@ -120,5 +121,6 @@ export function toSkillsDTO(world: WorldState): SkillsDTO {
     credential: credentialText(level),
     trades,
     wage: wageSummary(world),
+    standing: workStandingProse(world),
   };
 }

@@ -110,7 +110,13 @@ export function ventureGrossIncome(world: WorldState, parish: ParishId, venture:
   // venture by refreshVenturePerformance on each advance, so this read is pure and
   // deterministic; undefined → 1 (a flat, byte-identical venture).
   const perf = venture.performanceFactor ?? 1;
-  return Math.round(venture.spotBaseIncome * venture.outputScale * factor * saturation * perf);
+  // Phase 21 (A19): customer-side reputation shadows demand after a scandal and recovers
+  // only slowly. 1 (or undefined) is a clean name at full demand, so an un-scandalised
+  // venture is byte-identical.
+  const custRep = venture.customerReputation ?? 1;
+  return Math.round(
+    venture.spotBaseIncome * venture.outputScale * factor * saturation * perf * custRep,
+  );
 }
 
 // The share of a venture's gross the player actually banks after a hired operator's
@@ -437,4 +443,67 @@ export function ensurePlayerVentures(world: WorldState): void {
   const base = baseVentureFromSingleStream(p);
   p.ventures = base ? [base] : [];
   p.employer = null;
+}
+
+// ── Markets remember: venture-side scandal & demand memory (Phase 21, A19) ────
+// A quality failure — a food-poisoning beat, a botched job that gets talked about —
+// depresses a venture's customer demand and lifts back only slowly, so a fixed cause
+// still shadows takings for months (A19). Modelled as a single demand multiplier on the
+// venture (`customerReputation`), dropped sharply by a scandal and eased toward 1 each
+// month. Consumer-facing trades are the ones exposed: word of mouth reaches the buyers.
+
+// The trades whose custom is reputation-sensitive — food, hospitality, retail, transport.
+const SCANDAL_EXPOSED: ReadonlySet<Industry> = new Set<Industry>([
+  'RETAIL',
+  'TOURISM',
+  'TRANSPORTATION',
+  'AGRICULTURE',
+]);
+
+// A scandal cuts demand to this share of normal, and it recovers toward 1 at this rate
+// per month — a slow lift, so the shadow lingers long after the cause is put right.
+const SCANDAL_FLOOR = 0.55;
+const SCANDAL_RECOVERY = 0.06;
+// Per-eligible-venture monthly chance a scandal breaks. Rare (calibrated, not annual).
+const SCANDAL_PROBABILITY = 0.015;
+
+// Whether a venture's custom is exposed to reputation — a consumer-facing, active
+// venture not run purely as wage labour.
+function isScandalExposed(venture: Venture): boolean {
+  return (
+    venture.status === 'ACTIVE' && !venture.wageProfile && SCANDAL_EXPOSED.has(venture.industry)
+  );
+}
+
+// Drop a venture's customer reputation sharply — the scandal breaks. Never lifts it
+// (a fresh scandal on an already-shadowed venture cannot help it). Pure.
+export function applyVentureScandal(venture: Venture): void {
+  venture.customerReputation = Math.min(venture.customerReputation ?? 1, SCANDAL_FLOOR);
+}
+
+// Ease every active player venture's customer reputation back toward a whole name each
+// month (A19 — recovery lags the fix). A no-op for a venture that has never been
+// scandalised (customerReputation undefined → stays undefined → byte-identical). Pure.
+export function recoverVentureReputations(world: WorldState): void {
+  const p = world.player;
+  for (const v of p.ventures ?? []) {
+    if (v.customerReputation == null || v.customerReputation >= 1) continue;
+    const next = v.customerReputation + (1 - v.customerReputation) * SCANDAL_RECOVERY;
+    v.customerReputation = next >= 0.999 ? 1 : next;
+  }
+}
+
+// Roll for a scandal on the player's consumer-facing ventures (A19). Gated on the player
+// actually running an exposed venture, so NO rng is drawn — and nothing moves — for a
+// player without one (the digest holds). At most one scandal per month. Draws through
+// world.rng, so it stays reproducible per seed (S2).
+export function rollVentureScandal(world: WorldState): void {
+  const exposed = (world.player.ventures ?? []).filter(isScandalExposed);
+  if (exposed.length === 0) return;
+  for (const v of exposed) {
+    if (world.rng.next() < SCANDAL_PROBABILITY) {
+      applyVentureScandal(v);
+      return; // one scandal is enough of a month
+    }
+  }
 }

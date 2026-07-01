@@ -20,6 +20,9 @@ export const LLM_GENERATION_TRIGGERS = [
   // The economic web (Phase 20.5): the wider causes that ripple across the island.
   'CREDIT_CRUNCH',
   'COMPETITIVE_SQUEEZE',
+  // Reputation, trust & memory (Phase 21.4): the player's standing crosses a threshold —
+  // the bank remembers a broken promise, or people come to trust them with bigger jobs.
+  'REPUTATION_SHIFT',
   // Decision moments
   'MIGRATION_OPPORTUNITY',
   'MAJOR_INVESTMENT_DECISION',
@@ -55,6 +58,7 @@ const TRIGGER_NARRATIVE_TYPE: Record<LLMTriggerId, NarrativeEntryType> = {
   MAJOR_CONTRACT_WON: 'PERSONAL',
   CREDIT_CRUNCH: 'OBSERVATION',
   COMPETITIVE_SQUEEZE: 'OBSERVATION',
+  REPUTATION_SHIFT: 'OBSERVATION',
   MIGRATION_OPPORTUNITY: 'DECISION_REQUIRED',
   MAJOR_INVESTMENT_DECISION: 'DECISION_REQUIRED',
   ANNUAL_REFLECTION: 'MEMORY',
@@ -79,6 +83,18 @@ export interface TriggerSnapshot {
   businessesStartedCount: number;
   creditTight: boolean; // the credit-crunch mood before advancing (P20.5, for onset)
   tradeRivals: number; // founded rivals in the player's trade before advancing (P20.5)
+  standing: StandingBand; // the player's financial standing band before advancing (P21.4)
+}
+
+// A coarse, qualitative read of the player's financial standing — never the raw ledger
+// number (the iceberg boundary holds even inside the snapshot, S3). Hysteresis-friendly
+// three-band split so a shift fires on a real crossing, not a fingernail of drift.
+type StandingBand = 'LOW' | 'MID' | 'HIGH';
+function standingBandNow(world: WorldState): StandingBand {
+  const rel = world.player.reputation?.financialReliability ?? 0.5;
+  if (rel >= 0.68) return 'HIGH';
+  if (rel <= 0.34) return 'LOW';
+  return 'MID';
 }
 
 // Whether the island's credit is visibly frozen or sharply dearer — a credit crunch,
@@ -113,6 +129,7 @@ export function captureTriggerSnapshot(world: WorldState): TriggerSnapshot {
     businessesStartedCount: world.player.businessesStarted.length,
     creditTight: creditTightNow(world),
     tradeRivals: tradeRivalsNow(world),
+    standing: standingBandNow(world),
   };
 }
 
@@ -184,6 +201,22 @@ export function detectTriggers(world: WorldState, prev?: TriggerSnapshot): LLMTr
       narrativeType: narrativeTypeFor('COMPETITIVE_SQUEEZE'),
       data: { industry: occupation, parish: player.parish },
     });
+  }
+
+  // REPUTATION_SHIFT — the player's financial standing crosses a threshold this month
+  // (P21.4). Fires once on the crossing, in either direction: down into LOW (the bank
+  // remembers a broken promise) or up into HIGH (people come to trust them with bigger
+  // jobs). Needs the pre-advance snapshot to see the transition; the direction is a
+  // qualitative flag, never a score.
+  if (prev) {
+    const now = standingBandNow(world);
+    if (now !== prev.standing && (now === 'LOW' || now === 'HIGH')) {
+      triggers.push({
+        id: 'REPUTATION_SHIFT',
+        narrativeType: narrativeTypeFor('REPUTATION_SHIFT'),
+        data: { direction: now === 'HIGH' ? 'GAINED' : 'LOST', parish: player.parish },
+      });
+    }
   }
 
   // ANNUAL_REFLECTION — end of the playing year (December), once a year, not at

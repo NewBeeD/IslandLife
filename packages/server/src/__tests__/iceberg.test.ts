@@ -85,6 +85,17 @@ const GLOBAL_TOKENS = [
   'strategyBias',
   // observation memory (C10/A15) — the agent's hidden learning, never on the wire
   'observations',
+  // reputation ledger (Phase 21) — the four hidden bands and their bookkeeping, and the
+  // venture-side demand memory. The player reads their standing as prose (P21.4), never
+  // as any of these numbers (S3). The DTO carries a `standing` prose string, not these.
+  'financialReliability',
+  'fairDealing',
+  'employerQuality',
+  'civicStanding',
+  'seenKeptPromises',
+  'seenBrokenContracts',
+  'customerReputation',
+  'reputationCounted',
   // legacy (hidden until death)
   'legacyScore',
   'wealthScore',

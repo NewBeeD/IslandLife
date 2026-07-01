@@ -53,6 +53,18 @@ export {
 } from './macro';
 export { governmentAct, computeTaxRevenue } from './government';
 export {
+  updateReputation,
+  freshLedger,
+  financialReliabilityOf,
+  fairDealingOf,
+  employerQualityOf,
+  civicStandingOf,
+  operatorShareForEmployer,
+  reputationBand,
+  NEUTRAL_REPUTATION,
+} from './reputation';
+export type { ReputationBand } from './reputation';
+export {
   cellRevenue,
   firmCellShare,
   playerCellShare,
@@ -142,6 +154,9 @@ export {
   discontinueVenture,
   shelveVenture,
   reopenVenture,
+  applyVentureScandal,
+  recoverVentureReputations,
+  rollVentureScandal,
   VentureError,
 } from './ventures';
 export type { VentureCommitment } from './opportunities';

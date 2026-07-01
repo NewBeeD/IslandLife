@@ -2,6 +2,14 @@ import type { Bank, BankState, Industry, Loan, NPCAgent, WorldState } from '@isl
 import { clamp, clamp01 } from './rng';
 import { findBorrowerAsset } from './assets';
 import { macroCreditMultiplier, macroInterestRate } from './macro';
+import { financialReliabilityOf, NEUTRAL_REPUTATION } from './reputation';
+
+// Phase 21: how strongly the borrower's financial reputation and their cultural capital
+// bend the hidden credit score. Both are CENTRED on neutral (reputation 0.5, capital
+// 0.5), so a borrower with no ledger (every NPC, a pre-Phase-21 player) and neutral
+// capital prices exactly as before — the change is byte-identical until reputation moves.
+const REPUTATION_CREDIT_WEIGHT = 0.3;
+const CULTURAL_CREDIT_WEIGHT = 0.08;
 
 // Recomputes a bank's non-performing-loan ratio from the live loan set and maps
 // it to a state. Guards divide-by-zero (no active loans -> ratio 0).
@@ -242,19 +250,25 @@ function chooseBank(world: WorldState, applicant: NPCAgent): Bank | null {
 }
 
 // Hidden borrower-quality score in [0,1] from job stability, institutional ties,
-// payment history, cash, and collateral coverage. Never projected.
+// payment history, cash, and collateral coverage. Never projected. Phase 21: the bank
+// remembers — the borrower's standing financial reputation (built over years, lost in a
+// month) shifts the score, with a lighter cultural-capital bias. Both centred on neutral,
+// so a borrower with no ledger prices exactly as before (P-B3's risk-priced rate lands).
 function creditScore(applicant: NPCAgent, requestedPrincipal: number, collateralValue: number): number {
   const stability = stabilityFactor(applicant);
   const history = clamp01(0.5 + 0.05 * applicant.keptPromises - 0.12 * applicant.brokenContracts);
   const cashFactor = clamp01(applicant.cash / (requestedPrincipal * 0.5 + 1));
   const collateralFactor = clamp01(collateralValue / (requestedPrincipal + 1));
-  return clamp01(
+  const base =
     0.4 * stability +
-      0.2 * clamp01(applicant.socialCapitalInstitutional) +
-      0.15 * history +
-      0.15 * cashFactor +
-      0.1 * collateralFactor,
-  );
+    0.2 * clamp01(applicant.socialCapitalInstitutional) +
+    0.15 * history +
+    0.15 * cashFactor +
+    0.1 * collateralFactor;
+  const reputationBias =
+    REPUTATION_CREDIT_WEIGHT * (financialReliabilityOf(applicant) - NEUTRAL_REPUTATION);
+  const culturalBias = CULTURAL_CREDIT_WEIGHT * (applicant.culturalCapital - 0.5);
+  return clamp01(base + reputationBias + culturalBias);
 }
 
 // Assess a loan application. `collateralValue` is the worth of the asset being

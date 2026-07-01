@@ -27,6 +27,7 @@ import type {
   WorldState,
 } from '@island/shared';
 import { INCOME_LINE_LABEL, assetLabel, bankLabel } from './labels';
+import { financialStandingProse } from './standing';
 
 // A loan's source as the player would name it: a bank by its short label, or a
 // friend by name (Phase 11 friend-loans). Never exposes the synthetic bank id.
@@ -307,5 +308,6 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
     marketWatch: buildMarketWatch(world),
     marketMood: buildMarketMood(world),
     ownership: buildOwnership(world),
+    standing: financialStandingProse(world),
   };
 }

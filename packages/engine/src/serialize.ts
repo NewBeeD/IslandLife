@@ -34,10 +34,12 @@ export interface SerializedCompany extends Omit<Company, 'employees'> {
 
 export interface SerializedWorld {
   // v2 (Phase 19): agents gained an optional `observations` ring. v3 (Phase 20): the
-  // world gained a derived `macro` state. Both are additive — an older snapshot simply
-  // lacks them and deserializes to the neutral defaults (an empty ring, a baseline
-  // macro), so the migration path stays implicit (P-X4).
-  schemaVersion: 3;
+  // world gained a derived `macro` state. v4 (Phase 21): the player gained an optional
+  // `reputation` ledger and ventures an optional `customerReputation` demand memory. All
+  // additive — an older snapshot simply lacks them and deserializes to the neutral
+  // defaults (an empty ring, a baseline macro, a neutral ledger built on first tick, a
+  // whole customer name), so the migration path stays implicit (P-X4).
+  schemaVersion: 4;
   seed: number;
   month: number;
   rngState: RngState;
@@ -73,7 +75,7 @@ export function serializeWorld(world: WorldState): SerializedWorld {
   });
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     seed: world.seed,
     month: world.month,
     rngState: world.rng.serialize(),

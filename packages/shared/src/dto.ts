@@ -134,6 +134,10 @@ export interface MoneyDTO {
   // The player's ownership where outside backers/partners hold a share (Phase 11).
   // Empty/absent when everything the player runs is wholly their own.
   ownership?: OwnershipLine[];
+  // The player's money-facing standing (Phase 21) — how the banks and the people they
+  // owe remember them, as prose, never a score (S3). Absent at a neutral standing, so it
+  // appears only once there is something worth remarking on.
+  standing?: string;
 }
 
 // GET /saves/:id/skills — the Skills view (Phase 15, P15.4). The trades the player
@@ -161,6 +165,9 @@ export interface SkillsDTO {
   credential: string; // their formal qualification, in prose
   trades: SkillTradeDTO[]; // the trades they have built up (most accomplished first)
   wage?: WageSummaryDTO; // present for a wage worker — their current day rate
+  // The player's work-facing standing (Phase 21) — how they are regarded as someone to
+  // work for and deal with, as prose, never a score (S3). Absent when nothing stands out.
+  standing?: string;
 }
 
 // GET /saves/:id/jobs — the job market (Phase 16). A slate of postings the player

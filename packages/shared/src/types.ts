@@ -53,6 +53,10 @@ export interface Loan {
   // Phase 11: set once when a friend-loan default has strained the friendship, so the
   // social-capital hit is applied exactly once. Undefined on every ordinary loan.
   friendStrainApplied?: boolean;
+  // Phase 21: set once this loan's default has been charged against the player's
+  // financial reputation, so one default tanks reputation exactly once (mirrors
+  // friendStrainApplied). Undefined on every loan the reputation ledger has not seen.
+  reputationCounted?: boolean;
   // Phase 12: secured lending. When set, this loan is backed by the borrower's asset
   // of this id; the asset is pledged (cannot be sold) and is seized on default.
   // Undefined on an unsecured loan (additive — the digest holds).
@@ -347,6 +351,12 @@ export interface Venture {
   // income is dailyRate × workdaysPerMonth, recomputed monthly from the player's
   // skill. Undefined → the spot/standing model (byte-identical).
   wageProfile?: WageProfile;
+  // Phase 21 (A19 — markets have memory): the venture's customer-side reputation, a
+  // demand multiplier in (0,1]. 1 (or undefined) is a clean name at full demand; a
+  // scandal (a food-poisoning beat, a quality failure) drops it sharply and it recovers
+  // toward 1 only slowly, so a fixed cause still shadows takings for months. Undefined
+  // → 1 (byte-identical to a venture that has never been scandalised — the digest holds).
+  customerReputation?: number;
 }
 
 // ── NPC decision tags & observation memory (Phase 19) ────────────────────────
@@ -498,6 +508,39 @@ export interface NPCAgent {
   // competitors copy a winning move. Optional/undefined === no memory yet, so NPCs
   // and a pre-Phase-19 player are byte-identical (the digest holds).
   observations?: AgentObservation[];
+
+  // ── Phase 21: the reputation ledger (C11/A3/A11) ────────────────────────────
+  // A single, slowly-moving standing the rest of the world reads — banks, suppliers,
+  // partners, employees, government. Derived from the existing promise/contract/capital
+  // substrate but with its own memory and an asymmetric curve: it rises slowly, drops
+  // sharply, and eases back toward neutral over years, not months. Maintained for the
+  // player only (updated each month); undefined for NPCs and a pre-Phase-21 player, who
+  // read as neutral — so they stay byte-identical and the digest holds. Hidden state:
+  // the four bands never cross the wire as numbers (S3); the player reads them as prose.
+  reputation?: ReputationLedger;
+}
+
+// The player's multi-dimensional reputation (Phase 21). Every band is 0–1 with a
+// neutral resting point of 0.5. Derived/recomputed each month by `updateReputation`
+// from the promise/contract/loan/capital substrate; not a hand-edited source of truth.
+export interface ReputationLedger {
+  // How reliably the player meets money obligations — sharply cut by a loan default,
+  // knocked by arrears, built by a long clean-servicing record. Banks price off it.
+  financialReliability: number;
+  // How fairly the player is seen to deal — cut by a broken contract, built by kept
+  // promises. Suppliers/partners set their terms off it.
+  fairDealing: number;
+  // How good an employer the player is — built by running a solvent firm that pays its
+  // hands, eroded by layoffs and closures. Colours whether people want to work for them.
+  employerQuality: number;
+  // The player's civic standing — rests near their institutional capital, dented by
+  // government scrutiny. Colours how the state and its permits treat them.
+  civicStanding: number;
+  // Hidden bookkeeping so month-over-month events can be detected from the cumulative
+  // counters (kept promises, broken contracts) without double-counting history. Set to
+  // the player's current counters when the ledger is first created. Never on the wire.
+  seenKeptPromises: number;
+  seenBrokenContracts: number;
 }
 
 export interface ActivePolicy {

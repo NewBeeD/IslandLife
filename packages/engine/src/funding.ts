@@ -20,7 +20,15 @@ import type {
 } from '@island/shared';
 import { amortize } from './banking';
 import { activeVentures, ensurePlayerVentures, hasVentures, ventureGrossIncome } from './ventures';
+import { employerQualityOf, fairDealingOf, NEUTRAL_REPUTATION } from './reputation';
 import { clamp } from './rng';
+
+// Phase 21: how far the player's standing bends the terms people who know them offer.
+// A friend prices a loan a touch gentler for someone known to deal fair; a partner
+// concedes a little more of their own share to a trusted, well-regarded operator. Both
+// centred on neutral, so a player with no ledger gets exactly the pre-Phase-21 terms.
+const FAIR_DEALING_RATE_RELIEF = 0.04; // annual-rate relief at top fair-dealing standing
+const TRUST_CONCESSION_BONUS = 0.08; // extra partner concession at top standing
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PHASE 11 — equity, crowdfunding & NPC partnerships.
@@ -126,8 +134,14 @@ function makeOffer(
       ventureId: target.id,
     };
   }
+  // Phase 21: a friend lends a little cheaper to someone known to deal fair (centred on
+  // neutral, so a player with no ledger keeps the pre-Phase-21 rate).
+  const fairRelief = FAIR_DEALING_RATE_RELIEF * (fairDealingOf(world.player) - NEUTRAL_REPUTATION);
   const rate = clamp(
-    world.country.baseInterestRate + (1 - backer.agreeableness) * 0.05 - backer.patience * 0.02,
+    world.country.baseInterestRate +
+      (1 - backer.agreeableness) * 0.05 -
+      backer.patience * 0.02 -
+      fairRelief,
     0.02,
     0.16,
   );
@@ -604,11 +618,19 @@ export function negotiatePartnership(
   );
   const partner = world.agents.find((a) => a.id === spec.partnerId);
   // How far below fair the partner will go — a more agreeable, patient partner concedes
-  // more of their own share for the chance to work together.
+  // more of their own share for the chance to work together. Phase 21: a player known to
+  // deal fair and treat their people well earns a little extra ground (centred on neutral,
+  // so a player with no ledger keeps the pre-Phase-21 concession).
+  const trust =
+    0.5 * (fairDealingOf(world.player) - NEUTRAL_REPUTATION) +
+    0.5 * (employerQualityOf(world.player) - NEUTRAL_REPUTATION);
   const concession = clamp(
-    0.04 + (partner?.agreeableness ?? 0.5) * 0.14 + (partner?.patience ?? 0.5) * 0.06,
+    0.04 +
+      (partner?.agreeableness ?? 0.5) * 0.14 +
+      (partner?.patience ?? 0.5) * 0.06 +
+      TRUST_CONCESSION_BONUS * trust,
     0.04,
-    0.26,
+    0.3,
   );
   const floor = clamp(fair - concession, 0.05, 0.95); // the least the partner will accept
 

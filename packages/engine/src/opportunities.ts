@@ -51,6 +51,7 @@ import {
   surfaceCrowdfund,
   surfacePartnership,
 } from './funding';
+import { operatorShareForEmployer } from './reputation';
 import {
   accruePlayerInvestments,
   applyInvestment,
@@ -1115,7 +1116,12 @@ function applyNewVenture(
     barrierTier: spec.barrierTier,
     timeLoad: handsOnLoad,
     operatedBy,
-    ...(operatedBy === 'OPERATOR' ? { operatorShare: OPERATOR_SHARE } : {}),
+    // Phase 21: the operator's cut reflects the player's standing as an employer — a
+    // well-regarded one attracts hands for a smaller share, a poorly-regarded one pays
+    // more. Neutral standing → the base OPERATOR_SHARE (byte-identical pre-Phase-21).
+    ...(operatedBy === 'OPERATOR'
+      ? { operatorShare: operatorShareForEmployer(p, OPERATOR_SHARE) }
+      : {}),
     // P17.4 — a hidden success/volatility profile so some ventures underperform or fail.
     profile: ventureProfileForRisk(spec.riskLevel, world.rng),
     performanceFactor: 1,
