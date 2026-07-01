@@ -32,6 +32,11 @@ export interface MonthContext {
   loanPayment: number; // EC$/month, summed across active loans
   loanRemaining: number; // EC$ remaining principal, summed
   cashAfterPayment: number; // cash − this month's loan payment
+  // The economic web's mood (Phase 20.5) — qualitative booleans, never raw macro
+  // numbers (the iceberg, S3). `creditTight` reads a credit crunch off the macro
+  // state; `tradeCrowded` reads a competitive scrum crowding the player's own trade.
+  creditTight: boolean;
+  tradeCrowded: boolean;
   rand: () => number; // deterministic in (seed, month); never touches world.rng
 }
 
@@ -92,6 +97,24 @@ export function buildContext(world: WorldState): MonthContext {
   const loanPayment = activeLoans.reduce((s, l) => s + l.monthlyPayment, 0);
   const loanRemaining = activeLoans.reduce((s, l) => s + l.remainingPrincipal, 0);
 
+  // The economic-web mood, read qualitatively off the macro state (P20.5). A credit
+  // crunch = the island's credit visibly frozen or its cost sharply up; never the raw
+  // figures (S3). A crowded trade = a scrum of newly-founded rivals in the player's own
+  // parish×industry, the "everybody's chasing the same trade" competitive squeeze (C9).
+  const macro = world.macro;
+  const rateSpread = macro.effectiveInterestRate - world.country.baseInterestRate;
+  const creditTight = macro.systemicStress > 0.12 || macro.creditAvailability < 0.45 || rateSpread > 0.05;
+  const foundedRivals = occupation
+    ? world.companies.filter(
+        (c) =>
+          c.status !== 'CLOSED' &&
+          c.id.startsWith('CO_') &&
+          c.industry === occupation &&
+          c.parish === player.parish,
+      ).length
+    : 0;
+  const tradeCrowded = foundedRivals >= 3;
+
   const rand = mulberry32((Math.imul(world.seed >>> 0, 2654435761) + month * 40503) >>> 0);
 
   return {
@@ -112,6 +135,8 @@ export function buildContext(world: WorldState): MonthContext {
     loanPayment,
     loanRemaining,
     cashAfterPayment: player.cash - loanPayment,
+    creditTight,
+    tradeCrowded,
     rand,
   };
 }

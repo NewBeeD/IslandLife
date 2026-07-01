@@ -100,6 +100,26 @@ function buildMarketWatch(world: WorldState): MarketWatchLine[] {
   return lines;
 }
 
+// The wider economy's mood as a single qualitative phrase (Phase 20.5) — the macro
+// web's cause surfaced to the money view's market watch. Reads the macro state but
+// emits only prose, never the raw figures (the iceberg, S3): a credit crunch, a brisk
+// or a slow season for trade. Returns undefined when nothing notable is stirring, so a
+// calm economy adds no line.
+function buildMarketMood(world: WorldState): string | undefined {
+  const m = world.macro;
+  const rateSpread = m.effectiveInterestRate - world.country.baseInterestRate;
+  if (m.systemicStress > 0.12 || m.creditAvailability < 0.45 || rateSpread > 0.05) {
+    return 'Money is tight across the island this season — the banks are lending cautiously.';
+  }
+  if (m.aggregateDemand > 1.15 && m.businessConfidence > 0.6) {
+    return 'Trade is brisk around the island — buyers are out and the money is moving.';
+  }
+  if (m.aggregateDemand < 0.9 || m.consumerConfidence < 0.4) {
+    return 'The island’s trade is slow this season — people are holding on to what they have.';
+  }
+  return undefined;
+}
+
 // GET /saves/:id/money — the Money view. Income and expense lines reconstructed to
 // match what actually moved the player's cash this month (engine phase 5), plus
 // assets, debts, and (Phase 7, the scoped S3 amendment) the player's own finances
@@ -285,6 +305,7 @@ export function toMoneyDTO(world: WorldState): MoneyDTO {
     notes,
     ventures,
     marketWatch: buildMarketWatch(world),
+    marketMood: buildMarketMood(world),
     ownership: buildOwnership(world),
   };
 }

@@ -7,6 +7,7 @@ import {
   INCOME_TEMPLATES,
   MARKET_TEMPLATES,
   SEASON_TEMPLATES,
+  WEB_TEMPLATES,
 } from './templates';
 
 const MAX_ENTRIES = 8;
@@ -41,6 +42,12 @@ export function generateMonthlyEntries(world: WorldState): NarrativeEntry[] {
   // 4. Market — a price-movement observation if no event already covered it.
   const market = firstMatch(MARKET_TEMPLATES, ctx);
   if (market) chosen.push(market);
+
+  // 4b. The economic web (P20.5) — surface the wider cause when it is biting: a credit
+  //     crunch rippling across the island, or a competitive scrum crowding the player's
+  //     trade. Capped at 1 so it colours the month without crowding out the life.
+  const web = firstMatch(WEB_TEMPLATES, ctx);
+  if (web) chosen.push(web);
 
   // 5. Flavor — one seasonal note + one community note. These guarantee the
   //    3-entry floor so a quiet month still reads as a life, not a blank page.

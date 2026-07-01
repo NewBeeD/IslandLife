@@ -127,6 +127,10 @@ export interface MoneyDTO {
   // Local market prices the player's SPOT ventures read (P10.5). Empty when the
   // player has no market-driven income. Optional for back-compatibility.
   marketWatch?: MarketWatchLine[];
+  // The wider economy's mood in a single qualitative phrase (Phase 20.5) — the macro
+  // web's cause, read as prose, never as raw numbers (the iceberg, S3). e.g. "money is
+  // tight across the island this season". Absent when nothing notable is stirring.
+  marketMood?: string;
   // The player's ownership where outside backers/partners hold a share (Phase 11).
   // Empty/absent when everything the player runs is wholly their own.
   ownership?: OwnershipLine[];

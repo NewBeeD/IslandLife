@@ -213,10 +213,11 @@ export function Money({
         </section>
       )}
 
-      {money.marketWatch && money.marketWatch.length > 0 && (
+      {(money.marketMood || (money.marketWatch && money.marketWatch.length > 0)) && (
         <section className="money__section">
           <h3>At the market</h3>
-          {money.marketWatch.map((m, i) => (
+          {money.marketMood && <p className="money__note muted">{money.marketMood}</p>}
+          {(money.marketWatch ?? []).map((m, i) => (
             <div className="money__line" key={i}>
               <span>{m.label}</span>
               <span>

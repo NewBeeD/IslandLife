@@ -225,6 +225,36 @@ export const MARKET_TEMPLATES: Template[] = [
   },
 ];
 
+// ── The economic web (Phase 20.5): the CAUSES surfaced in voice ──────────────
+// When one event ripples across the island (a credit crunch) or success draws a crowd
+// into the player's trade (a competitive squeeze), the player reads the *cause* here —
+// in the same grounded, second-person voice, never as a number (the iceberg, S3).
+export const WEB_TEMPLATES: Template[] = [
+  {
+    id: 'CREDIT_CRUNCH',
+    type: 'OBSERVATION',
+    weight: 1,
+    match: (c) => c.creditTight,
+    render: (c) =>
+      `Money got tight all over the island this season. The banks have pulled their horns in — ` +
+      `a man who put his hand out for credit last year finds the door heavier now, and the ones ` +
+      `already carrying a payment feel it bite harder. Around ${c.parishName} the talk is careful, ` +
+      `people holding what they have and slow to reach for what they do not. It will ease, these ` +
+      `things always do, but you feel the cold of it while it lasts.`,
+  },
+  {
+    id: 'COMPETITIVE_SQUEEZE',
+    type: 'OBSERVATION',
+    weight: 1,
+    match: (c) => c.tradeCrowded,
+    render: (c) =>
+      `The trade you are in has drawn a crowd. There are more hands at it around ${c.parishName} ` +
+      `than there were a season ago — new faces chasing the same shillings from the same few ` +
+      `pockets, and the wharf feels tighter for it. It is the way of a good thing: let it be seen ` +
+      `to pay and others come running to do the same. You hold your corner and watch them come.`,
+  },
+];
+
 // ── Flavor: season and community texture, so a quiet month still reads as a life
 // rather than a ledger. One seasonal and one community note round out each feed. ─
 export const SEASON_TEMPLATES: Template[] = [

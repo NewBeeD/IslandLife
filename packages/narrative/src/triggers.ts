@@ -17,6 +17,9 @@ export const LLM_GENERATION_TRIGGERS = [
   'FIRST_BUSINESS_STARTED',
   'LOAN_DEFAULT',
   'MAJOR_CONTRACT_WON',
+  // The economic web (Phase 20.5): the wider causes that ripple across the island.
+  'CREDIT_CRUNCH',
+  'COMPETITIVE_SQUEEZE',
   // Decision moments
   'MIGRATION_OPPORTUNITY',
   'MAJOR_INVESTMENT_DECISION',
@@ -50,6 +53,8 @@ const TRIGGER_NARRATIVE_TYPE: Record<LLMTriggerId, NarrativeEntryType> = {
   FIRST_BUSINESS_STARTED: 'PERSONAL',
   LOAN_DEFAULT: 'PERSONAL',
   MAJOR_CONTRACT_WON: 'PERSONAL',
+  CREDIT_CRUNCH: 'OBSERVATION',
+  COMPETITIVE_SQUEEZE: 'OBSERVATION',
   MIGRATION_OPPORTUNITY: 'DECISION_REQUIRED',
   MAJOR_INVESTMENT_DECISION: 'DECISION_REQUIRED',
   ANNUAL_REFLECTION: 'MEMORY',
@@ -72,12 +77,42 @@ export function triggerKey(saveId: string, month: number, id: LLMTriggerId): str
 export interface TriggerSnapshot {
   month: number;
   businessesStartedCount: number;
+  creditTight: boolean; // the credit-crunch mood before advancing (P20.5, for onset)
+  tradeRivals: number; // founded rivals in the player's trade before advancing (P20.5)
 }
+
+// Whether the island's credit is visibly frozen or sharply dearer — a credit crunch,
+// read qualitatively off the macro state (never the raw figures, S3).
+function creditTightNow(world: WorldState): boolean {
+  const m = world.macro;
+  return (
+    m.systemicStress > 0.12 ||
+    m.creditAvailability < 0.45 ||
+    m.effectiveInterestRate - world.country.baseInterestRate > 0.05
+  );
+}
+
+// Founded rivals crowding the player's own parish×industry — the competitive scrum.
+function tradeRivalsNow(world: WorldState): number {
+  const occ = world.player.occupation;
+  if (!occ) return 0;
+  return world.companies.filter(
+    (c) =>
+      c.status !== 'CLOSED' &&
+      c.id.startsWith('CO_') &&
+      c.industry === occ &&
+      c.parish === world.player.parish,
+  ).length;
+}
+
+const TRADE_CROWDED_THRESHOLD = 3;
 
 export function captureTriggerSnapshot(world: WorldState): TriggerSnapshot {
   return {
     month: world.month,
     businessesStartedCount: world.player.businessesStarted.length,
+    creditTight: creditTightNow(world),
+    tradeRivals: tradeRivalsNow(world),
   };
 }
 
@@ -123,6 +158,31 @@ export function detectTriggers(world: WorldState, prev?: TriggerSnapshot): LLMTr
         industry: started.industry,
         wasFirstInIndustryInParish: started.wasFirstInIndustryInParish,
       },
+    });
+  }
+
+  // CREDIT_CRUNCH — the island's credit freezes THIS month (an onset, not every month
+  // of a long crunch). Needs the pre-advance snapshot to see the transition.
+  if (prev && !prev.creditTight && creditTightNow(world)) {
+    triggers.push({
+      id: 'CREDIT_CRUNCH',
+      narrativeType: narrativeTypeFor('CREDIT_CRUNCH'),
+      data: { parish: player.parish },
+    });
+  }
+
+  // COMPETITIVE_SQUEEZE — the player's trade crosses into a crowded scrum this month
+  // (rivals rising past the threshold), the "everybody's chasing the trade you cornered"
+  // moment (C9). An onset, keyed on the crossing so it fires once as the crowd arrives.
+  if (
+    prev &&
+    prev.tradeRivals < TRADE_CROWDED_THRESHOLD &&
+    tradeRivalsNow(world) >= TRADE_CROWDED_THRESHOLD
+  ) {
+    triggers.push({
+      id: 'COMPETITIVE_SQUEEZE',
+      narrativeType: narrativeTypeFor('COMPETITIVE_SQUEEZE'),
+      data: { industry: occupation, parish: player.parish },
     });
   }
 
