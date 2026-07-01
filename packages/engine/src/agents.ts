@@ -16,6 +16,7 @@ import {
   newFirmEconomics,
   type FirmEconomics,
 } from './company';
+import { competitiveEntryDraw } from './competition';
 import { clamp } from './rng';
 
 export type Action =
@@ -138,16 +139,22 @@ function startBusinessCandidate(
   if (world.companies.some((c) => c.ownerId === agent.id && c.status !== 'CLOSED')) return null;
 
   // Scout the parish for the cell with the best expected margin right now — seen
-  // through the founder's optimism about the crowd already there.
-  let best: { industry: Industry; econ: FirmEconomics } | null = null;
+  // through the founder's optimism about the crowd already there, and pulled toward a
+  // cell someone is visibly cleaning up in: a proven, dominated trade draws entrants
+  // muscling in (P20.4, C9 — success creates competition). The dominance draw lifts the
+  // *perceived* margin; the real P&L (with the crowding they add) still decides their
+  // fate, so entry keeps coming until the fat cell is competed back to ordinary.
+  let best: { industry: Industry; econ: FirmEconomics; perceived: number } | null = null;
   for (const industry of FOUNDABLE_INDUSTRIES) {
     const econ = newFirmEconomics(world, industry, agent.parish, FOUNDER_OPTIMISM);
-    if (!best || econ.expectedMonthlyProfit > best.econ.expectedMonthlyProfit) {
-      best = { industry, econ };
+    const perceived =
+      econ.expectedMonthlyProfit * competitiveEntryDraw(world, industry, agent.parish);
+    if (!best || perceived > best.perceived) {
+      best = { industry, econ, perceived };
     }
   }
   if (!best) return null;
-  const { industry, econ } = best;
+  const { industry, econ, perceived } = best;
 
   // Subjective odds the venture sticks: a capable founder in an uncrowded cell rates
   // its chances higher; inexperience and a crowd eat into them. The firm's *actual*
@@ -162,8 +169,11 @@ function startBusinessCandidate(
     outcomes: [
       { probability: 1, payoff: -econ.entryCost, delayMonths: 0 },
       {
+        // The perceived monthly profit — the honest current-crowd estimate, lifted by
+        // the pull of a dominated cell (P20.4). Founders chase the fat trade; the real
+        // P&L, seeing every rival they add, then decides who survives.
         probability: pSuccess,
-        payoff: econ.expectedMonthlyProfit * PROFIT_HORIZON,
+        payoff: perceived * PROFIT_HORIZON,
         delayMonths: PROFIT_HORIZON / 2,
       },
     ],

@@ -52,6 +52,21 @@ export {
   injectSystemicShock,
 } from './macro';
 export { governmentAct, computeTaxRevenue } from './government';
+export {
+  cellRevenue,
+  firmCellShare,
+  playerCellShare,
+  industryRevenue,
+  firmIndustryShare,
+  playerIndustryShare,
+  competitivePressureFactor,
+  competitiveEntryDraw,
+  applyCompetitivePricePressure,
+  dominantCaptureExists,
+  COMPETITION_SHARE_THRESHOLD,
+  ANTITRUST_SHARE_THRESHOLD,
+  ANTITRUST_MIN_REVENUE,
+} from './competition';
 export { computeLegacyIncrement, netWorthOf } from './legacy';
 export {
   npcDecide,

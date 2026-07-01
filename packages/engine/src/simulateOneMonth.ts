@@ -19,6 +19,7 @@ import {
 import { rollRandomEvents } from './events';
 import { governmentAct } from './government';
 import { injectSystemicShock, macroLendingAppetiteFactor, recomputeMacro } from './macro';
+import { applyCompetitivePricePressure } from './competition';
 import { chargeTuition } from './education';
 import { computeLegacyIncrement } from './legacy';
 import { updateMarketPrice } from './market';
@@ -59,6 +60,13 @@ export function simulateOneMonth(world: WorldState): WorldState {
       world.companies,
     );
   }
+
+  // PHASE 3b: competitive price pressure (P20.4, C9). A firm that has come to dominate
+  // its parish×industry cell has rivals undercutting it — its margin is competed down
+  // before this month's revenue is priced into profit. Self-limiting and never ruinous;
+  // a no-op for every firm under the dominance threshold, so a competitive market is
+  // untouched.
+  applyCompetitivePricePressure(world);
 
   // PHASE 4: costs, solvency, closure cascade
   for (const company of world.companies) {

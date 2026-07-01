@@ -501,7 +501,9 @@ export interface NPCAgent {
 }
 
 export interface ActivePolicy {
-  type: 'PUBLIC_WORKS_PROGRAM' | 'BANK_LIQUIDITY_SUPPORT' | 'AUSTERITY';
+  // Phase 20 (P20.4): ANTITRUST — the government's scrutiny of a firm or the player who
+  // has captured a parish×industry, the state end of "success creates competition".
+  type: 'PUBLIC_WORKS_PROGRAM' | 'BANK_LIQUIDITY_SUPPORT' | 'AUSTERITY' | 'ANTITRUST';
   cost: number;
   effect: string;
   magnitude: number;

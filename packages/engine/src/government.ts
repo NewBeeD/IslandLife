@@ -1,4 +1,5 @@
 import type { ActivePolicy, Government, WorldState } from '@island/shared';
+import { dominantCaptureExists } from './competition';
 
 // Sums tax from operating (non-CLOSED) companies. A company that closed this
 // month drops out automatically — which is why the closure cascade does not
@@ -37,5 +38,13 @@ export function governmentAct(gov: Government, world: WorldState): void {
 
   if (gov.fiscalBalance < -gov.monthlyTaxRevenue * 0.3 && !hasPolicy('AUSTERITY')) {
     gov.policies.push({ type: 'AUSTERITY', cost: 0, effect: 'SPENDING_CUT', magnitude: 0.15, duration: 12 });
+  }
+
+  // Phase 20.4 (C9/P-B6): when a single operator — a firm or the player — captures a
+  // parish×industry past the antitrust threshold, the government notices market capture
+  // and opens scrutiny. Refreshed while the capture persists; it lapses once the
+  // position is competed back down. The state end of "winning paints a target".
+  if (dominantCaptureExists(world) && !hasPolicy('ANTITRUST')) {
+    gov.policies.push({ type: 'ANTITRUST', cost: 0, effect: 'MARKET_SCRUTINY', magnitude: 0.1, duration: 6 });
   }
 }
