@@ -167,6 +167,13 @@ export interface Company {
   status: CompanyStatus;
   isSolvent: boolean;
   estimatedAnnualTax: number;
+  // Phase 19.6: the firm's working-capital balance. Each month the firm's surplus
+  // (profit) flows in and labour is paid out of it — so wages an NPC-founded firm
+  // pays reconcile against real firm cash, and a firm short of cash lays off instead
+  // of conjuring wages. Seed firms hold a balance too (working capital, for Phase 20)
+  // but their established-economy payroll is not yet drawn from it. Defaulted to a
+  // few months of costs on deserialize for snapshots written before it existed.
+  cash: number;
   // Phase 11: a shared firm formed with an NPC partner splits profit by share.
   // Undefined for every seed company (the digest holds).
   equityHolders?: EquityHolder[];

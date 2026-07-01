@@ -21,6 +21,7 @@ import type {
   RNG,
   WorldState,
 } from '@island/shared';
+import { startingWorkingCapital } from './company';
 import { createCharacter, hydratePlayerInto } from './characterCreation';
 import type { CreationChoices } from './characterCreation';
 import { clamp01, createRng } from './rng';
@@ -158,15 +159,17 @@ export function buildWorld(seed: number, opts: BuildOptions = {}): WorldState {
     const goodId = REPRESENTATIVE_GOOD[s.industry];
     const good = goods.find((g) => g.id === goodId);
     const basePrice = good?.basePrice ?? 1;
+    const baseOperatingCosts = s.costs / 12;
     return {
       id: s.id, name: s.name, industry: s.industry, type: s.type, parish: s.parish,
       ownerId: s.ownerId, marketShare: s.marketShare,
       monthlyOutputUnits: Math.round(s.revenue / 12 / basePrice),
       employees: [], loans: [],
-      baseOperatingCosts: s.costs / 12,
+      baseOperatingCosts,
       monthlyRevenue: 0, profit: 0, consecutiveLossMonths: 0,
       status: 'HEALTHY', isSolvent: true,
       estimatedAnnualTax: s.revenue * 0.1,
+      cash: startingWorkingCapital(baseOperatingCosts),
     };
   });
 

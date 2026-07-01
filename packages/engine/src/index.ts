@@ -26,14 +26,29 @@ export {
   competitionFactor,
   foundedRivalsInCell,
   isFoundedFirm,
+  runFoundedPayroll,
+  runFoundedLabour,
+  hiredHandCount,
+  startingWorkingCapital,
   FOUNDABLE_INDUSTRIES,
+  FOUNDED_MAX_HANDS,
+  HIRED_WAGE_MIN,
+  HIRED_WAGE_MAX,
+  WORKING_CAPITAL_MONTHS,
   NEW_FIRM_ENTRY_COST,
 } from './company';
 export type { FirmEconomics } from './company';
 export { rollRandomEvents } from './events';
 export { governmentAct, computeTaxRevenue } from './government';
 export { computeLegacyIncrement, netWorthOf } from './legacy';
-export { npcDecide, applyAction, triggerPersonalLoanDefault } from './agents';
+export {
+  npcDecide,
+  applyAction,
+  triggerPersonalLoanDefault,
+  monthlyConsumption,
+  MPC_MAX,
+  MPC_MIN,
+} from './agents';
 export {
   evaluateOptions,
   chooseBest,

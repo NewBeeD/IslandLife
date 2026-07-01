@@ -45,6 +45,51 @@ const FOUNDING_RATE = 0.05;
 // sustainable count, which is what keeps the founded cohort churning (see newFirmEconomics).
 const FOUNDER_OPTIMISM = 0.5;
 
+// ── The informal sector & labour demand (P19.6) ──────────────────────────────
+// The flat "find work at 0.25" lottery was a one-way ratchet: informal self-employment
+// never reversed, so unemployment drained to zero and never moved. P19.6 grounds the
+// informal sector in firm fortunes. `labourDemand` reads the cycle off the firms: the
+// share of active companies that are HEALTHY. In a boom firms thrive, informal work is
+// plentiful and hustles hold; in a bust firms distress and close, informal work dries
+// up. So unemployment now rises and falls with how firms are actually doing (their
+// P&L), and the founded-firm hiring/firing in `runFoundedLabour` bites on a real pool.
+export function labourDemand(world: WorldState): number {
+  const active = world.companies.filter((c) => c.status !== 'CLOSED');
+  if (active.length === 0) return 0.5;
+  const healthy = active.filter((c) => c.status === 'HEALTHY').length;
+  return healthy / active.length;
+}
+
+// The monthly chance an unemployed agent finds informal self-employment — high when
+// labour demand is strong, scarce in a downturn (replaces the flat constant).
+export function informalFindChance(world: WorldState): number {
+  return clamp(0.3 * labourDemand(world), 0.03, 0.45);
+}
+
+// The monthly chance an informal hustle dries up and its holder falls back to
+// unemployment — a small base churn, rising as demand weakens. Together with the find
+// chance this gives a living, non-zero unemployment rate (~fail/(find+fail)) that
+// swings with the cycle, instead of pinning at zero.
+export function informalFailChance(world: WorldState): number {
+  return clamp(0.02 + 0.08 * (1 - labourDemand(world)), 0.02, 0.22);
+}
+
+// Informal churn (P19.6): roll each non-player informally self-employed agent against
+// the failure rate; a dried-up hustle returns them to the unemployed pool. A founded-
+// firm owner or a hired hand (both EMPLOYED) is untouched — only the precarious
+// informal SELF_EMPLOYED churn. Draws go through world.rng (S2). Mutates in place.
+export function applyInformalChurn(world: WorldState): void {
+  const failChance = informalFailChance(world);
+  for (const agent of world.agents) {
+    if (agent.isPlayer || agent.employmentStatus !== 'SELF_EMPLOYED') continue;
+    if (world.rng.next() < failChance) {
+      agent.employmentStatus = 'UNEMPLOYED';
+      agent.occupation = null;
+      agent.monthlyIncome = 0;
+    }
+  }
+}
+
 // Build the actions an agent could take this month, each framed as an outcome
 // distribution against the reference of holding still (SAVE). Since P19.5 the menu can
 // include START_BUSINESS — founding a small firm — alongside SEEK_EMPLOYMENT and SAVE;
@@ -56,9 +101,9 @@ const FOUNDER_OPTIMISM = 0.5;
 function candidateActions(agent: NPCAgent, world: WorldState): ActionCandidate<Action>[] {
   const candidates: ActionCandidate<Action>[] = [];
   if (agent.employmentStatus === 'UNEMPLOYED') {
-    // The same hiring odds `applyAction` rolls — finding work is a pure gain (income
-    // this month), so for any positive odds it beats holding, exactly as before.
-    const hireChance = 0.25 * (1 - world.government.unemploymentRate);
+    // The same cycle-driven odds `applyAction` rolls — finding informal work is a pure
+    // gain (income this month), so for any positive odds it beats holding.
+    const hireChance = informalFindChance(world);
     candidates.push({
       type: 'SEEK_EMPLOYMENT',
       outcomes: [{ probability: hireChance, payoff: EXPECTED_SELF_EMPLOYED_INCOME, delayMonths: 0 }],
@@ -124,6 +169,26 @@ function startBusinessCandidate(
     ],
     meta: { type: 'START_BUSINESS', industry },
   };
+}
+
+// ── Consumption (P19.6) ──────────────────────────────────────────────────────
+// A real spending model with a declining marginal propensity to consume, replacing
+// the flat "living costs + half of surplus" rule. Subsistence living costs are always
+// met; on top of that a share of disposable income is spent — a large share when
+// disposable income is thin (the near-subsistence consume nearly all of it) shrinking
+// toward a floor as income grows (the comfortable save more). So cash still cannot
+// pile up unboundedly, but the wealthy accumulate faster than the poor — an Engel /
+// MPC curve rather than a flat rate. Pure and deterministic.
+export const MPC_MAX = 0.85; // propensity to consume thin disposable income
+export const MPC_MIN = 0.3; // floor for ample disposable income
+const MPC_HALF_DISPOSABLE = 2500; // disposable income at which the MPC sits midway
+
+export function monthlyConsumption(income: number, livingCosts: number): number {
+  const disposable = Math.max(0, income - livingCosts);
+  // Falls hyperbolically from MPC_MAX toward MPC_MIN as disposable income grows.
+  const t = MPC_HALF_DISPOSABLE / (MPC_HALF_DISPOSABLE + disposable); // 1 → 0
+  const mpc = MPC_MIN + (MPC_MAX - MPC_MIN) * t;
+  return livingCosts + mpc * disposable;
 }
 
 // The living NPC decision: score the available actions with the prospect-theory

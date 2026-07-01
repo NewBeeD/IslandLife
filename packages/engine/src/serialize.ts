@@ -103,7 +103,11 @@ export function deserializeWorld(s: SerializedWorld): WorldState {
   });
   const companies: Company[] = s.companies.map((sc) => {
     const { employeeIds: _drop, ...rest } = sc;
-    return { ...clone(rest), employees: [] } as Company;
+    const company = { ...clone(rest), employees: [] } as Company;
+    // Phase 19.6: a snapshot written before companies held a cash balance defaults to
+    // a few months of working capital, so its firms reconcile payroll from month one.
+    company.cash ??= Math.round(company.baseOperatingCosts * 3);
+    return company;
   });
 
   const agentById = new Map(agents.map((a) => [a.id, a]));

@@ -181,15 +181,16 @@ describe('the player rides arrears before defaulting (a seasonal trade is surviv
     p.employmentStatus = 'SELF_EMPLOYED';
     p.employer = null;
     p.incomeMode = undefined;
-    p.monthlyIncome = 1200;
-    p.monthlyLivingCosts = 300;
+    p.monthlyIncome = 1500;
+    p.monthlyLivingCosts = 400;
     p.cash = 0;
 
-    // A big bank loan the player can comfortably service (1200 income - 750 spending
-    // - 400 payment = +50), plus a small friend loan that tips the month negative.
+    // A big bank loan the player can comfortably service (1500 income − ~1150 spending
+    // at the P19.6 consumption curve − 300 payment ≈ +50), plus a small friend loan
+    // whose 200 payment tips the month ~150 negative — coverable by defaulting it alone.
     const bankLoan: Loan = {
       id: 'LOAN_BANK', bankId: 'NCB', borrowerPersonId: p.id, principal: 20000,
-      remainingPrincipal: 20000, interestRate: 0.1, monthlyPayment: 400, termMonths: 60,
+      remainingPrincipal: 20000, interestRate: 0.1, monthlyPayment: 300, termMonths: 60,
       originMonth: 0, status: 'ACTIVE',
     };
     const friendLoan: Loan = {
@@ -205,7 +206,7 @@ describe('the player rides arrears before defaulting (a seasonal trade is surviv
     simulateOneMonth(world);
 
     // The affordable bank loan survives; only the friend loan (the smaller payment,
-    // enough to cover the 150 gap on its own) goes into default — not the whole book.
+    // enough to cover the ~150 gap on its own) goes into default — not the whole book.
     expect(world.player.loans.find((l) => l.id === 'LOAN_BANK')?.status).toBe('ACTIVE');
     expect(world.player.loans.some((l) => l.id === 'LOAN_FRIEND' && l.status === 'ACTIVE')).toBe(
       false,

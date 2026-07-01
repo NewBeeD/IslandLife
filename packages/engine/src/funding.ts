@@ -524,6 +524,9 @@ export function applyPartnership(
     status: 'HEALTHY',
     isSolvent: true,
     estimatedAnnualTax: 0,
+    // Working capital sized to its cost line (P19.6). A player-owned partnership firm
+    // is excluded from the NPC founded-firm labour market, so this is only a balance.
+    cash: Math.round(spec.baseOperatingCosts * 3),
     equityHolders: [{ personId: spec.partnerId, name: spec.partnerName, share: partnerShare }],
   };
   world.companies.push(company);

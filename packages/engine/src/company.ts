@@ -23,6 +23,51 @@ import type {
 const COMPETITION_HAIRCUT_PER_RIVAL = 0.06;
 const COMPETITION_FACTOR_FLOOR = 0.5;
 
+// ── Company cash, labour & payroll (P19.6) ───────────────────────────────────
+// Every firm carries a working-capital balance. A seed firm starts with this many
+// months of its cost line; an NPC-founded firm is capitalized with the founder's
+// entry cost (the money the founder already paid now lands in the firm). The month's
+// surplus flows in and labour is paid out — so a founded firm's wages reconcile
+// against real cash and a firm that runs dry lays off rather than conjuring pay.
+export const WORKING_CAPITAL_MONTHS = 3;
+
+// A founded sole trader can take on a couple of hired hands beyond the owner. Each
+// hand adds this share of the owner's base output (more labour, more production), so
+// revenue — and the firm's appetite to hire — rises with headcount but is bounded.
+export const FOUNDED_MAX_HANDS = 2;
+const LABOUR_MARGINAL_OUTPUT = 0.45;
+
+// A hired hand's monthly wage band (modest — a small roadside firm, not a salaried
+// post). Drawn at hire through world.rng so it stays reproducible per seed.
+export const HIRED_WAGE_MIN = 700;
+export const HIRED_WAGE_MAX = 1100;
+
+// The owner draws the firm's residual cash above a working-capital reserve, capped so
+// a fat month builds the firm rather than being stripped bare in one draw.
+const OWNER_DRAW_RESERVE_MONTHS = 1;
+const OWNER_DRAW_CAP = 4000;
+
+// Hiring gates (P&L-driven, P19.6): a firm only takes on a hand when it is HEALTHY,
+// this month cleared comfortably more than a wage, and it holds a cash buffer of a
+// few wages — so hiring tracks firm fortunes and self-limits when the cell crowds.
+const HIRE_MIN_PROFIT = HIRED_WAGE_MAX * 0.6;
+const HIRE_CASH_MONTHS = 3;
+
+// Hired hands beyond the owner — the labour that scales a founded firm's output.
+export function hiredHandCount(company: Pick<Company, 'employees' | 'ownerId'>): number {
+  return company.employees.filter((e) => e.id !== company.ownerId).length;
+}
+
+// The output multiplier from a founded firm's hired labour (owner = the base 1×).
+function labourFactor(company: Pick<Company, 'employees' | 'ownerId'>): number {
+  return 1 + LABOUR_MARGINAL_OUTPUT * hiredHandCount(company);
+}
+
+// Working capital a firm is stood up with, given its monthly cost line.
+export function startingWorkingCapital(baseOperatingCosts: number): number {
+  return Math.round(baseOperatingCosts * WORKING_CAPITAL_MONTHS);
+}
+
 // An NPC-founded firm carries the `CO_` id prefix `formCompany` mints; the seed
 // companies do not. This is the marker for "is in the entrepreneurial scrum."
 export function isFoundedFirm(company: Pick<Company, 'id'>): boolean {
@@ -65,7 +110,12 @@ export function computeCompanyRevenue(
   });
   if (!market) return 0;
 
-  const baseRevenue = market.currentPrice * company.monthlyOutputUnits;
+  // A founded firm's output scales with its hired labour (P19.6): the owner is the
+  // base 1×, each hand it has taken on adds more production. monthlyOutputUnits stays
+  // the owner-base set at founding, so a solo founded firm is byte-identical to before
+  // and seed firms (no labour scaling) are untouched.
+  const labour = isFoundedFirm(company) ? labourFactor(company) : 1;
+  const baseRevenue = market.currentPrice * company.monthlyOutputUnits * labour;
   // Larger market share = slightly steadier revenue. Centered near 1.0 so it does
   // not systematically haircut small firms below their seed margin (the 0.8 base
   // in the design doc turned thin-but-viable firms structurally loss-making).
@@ -196,6 +246,9 @@ export function formCompany(agent: NPCAgent, world: WorldState, industry: Indust
     status: 'HEALTHY',
     isSolvent: true,
     estimatedAnnualTax: NEW_FIRM_TARGET_REVENUE * 12 * 0.1,
+    // Capitalized with the founder's entry cost — the money leaving the agent below
+    // is the firm's opening working capital, so the founding is cash-conserving.
+    cash: econ.entryCost,
   };
 
   agent.cash = Math.max(0, agent.cash - econ.entryCost);
@@ -210,6 +263,91 @@ export function formCompany(agent: NPCAgent, world: WorldState, industry: Indust
 
   world.companies.push(company);
   return company;
+}
+
+// Lay an employee off a founded firm: they leave the roster and rejoin the unemployed.
+// Never called on the owner — a sole trader without their own labour is a closure, not
+// a layoff. Mutates the agent and the firm's roster in place.
+function layOff(company: Company, employee: NPCAgent): void {
+  company.employees = company.employees.filter((e) => e !== employee);
+  employee.employmentStatus = 'UNEMPLOYED';
+  employee.employer = null;
+  employee.monthlyIncome = 0;
+}
+
+// Reconcile a founded firm's labour against its cash for the month (P19.6). The month's
+// surplus has already flowed into `company.cash` by the caller. Hired hands are the
+// first claim — each paid their wage out of cash if the firm can cover it, else laid
+// off (a firm that cannot make payroll sheds the hand rather than paying with money it
+// does not have). The owner is the residual claimant, drawing whatever is left above a
+// thin working-capital reserve, capped so a good month builds the firm. The wage/draw
+// set here is exactly what the agent banks in Phase 5, so cash out of the firm equals
+// pay into its people — wages reconcile against firm cash. Seed firms are untouched
+// (their established-economy payroll stays the Phase-1 flat model — Phase 20's remit).
+export function runFoundedPayroll(company: Company): void {
+  if (!isFoundedFirm(company) || company.status === 'CLOSED') return;
+
+  // Pay the hired hands first, oldest contract to newest; a hand the firm cannot
+  // cover this month is let go.
+  for (const emp of company.employees.filter((e) => e.id !== company.ownerId)) {
+    if (company.cash >= emp.monthlyIncome) {
+      company.cash -= emp.monthlyIncome;
+    } else {
+      layOff(company, emp);
+    }
+  }
+
+  // The owner draws the residual above a reserve, within a cap.
+  const owner = company.employees.find((e) => e.id === company.ownerId);
+  if (owner) {
+    const reserve = company.baseOperatingCosts * OWNER_DRAW_RESERVE_MONTHS;
+    const draw = Math.max(0, Math.min(company.cash - reserve, OWNER_DRAW_CAP));
+    owner.monthlyIncome = Math.round(draw);
+    company.cash -= draw;
+  }
+}
+
+// The founded-firm labour market (P19.6): firms hire and fire on their own P&L, so
+// unemployment moves with firm fortunes rather than a flat constant. A HEALTHY firm
+// that cleared comfortably more than a wage this month and holds a cash buffer takes
+// on a local unemployed agent (output, and so revenue, then scales up with the hand).
+// A DISTRESSED firm sheds its newest hand to cut its wage bill. A boom lifts prices →
+// revenue → firms hire → unemployment falls; a bust does the reverse. Every draw goes
+// through world.rng, so it stays reproducible per seed (S2). Mutates the world in place.
+export function runFoundedLabour(world: WorldState): void {
+  for (const company of world.companies) {
+    if (!isFoundedFirm(company) || company.status === 'CLOSED') continue;
+    // Only NPC sole traders run this market — a player-owned partnership firm (also a
+    // CO_ id) manages its own roster through the player's choices, not the engine.
+    if (company.ownerId === world.player.id) continue;
+
+    if (
+      company.status === 'HEALTHY' &&
+      company.profit > HIRE_MIN_PROFIT &&
+      company.cash >= HIRE_CASH_MONTHS * HIRED_WAGE_MAX &&
+      hiredHandCount(company) < FOUNDED_MAX_HANDS
+    ) {
+      const candidates = world.agents.filter(
+        (a) =>
+          !a.isPlayer &&
+          a.employmentStatus === 'UNEMPLOYED' &&
+          a.parish === company.parish,
+      );
+      if (candidates.length > 0) {
+        const hire = world.rng.pick(candidates);
+        hire.employmentStatus = 'EMPLOYED';
+        hire.employer = company;
+        hire.occupation = company.industry;
+        hire.monthlyIncome = Math.round(world.rng.range(HIRED_WAGE_MIN, HIRED_WAGE_MAX));
+        company.employees.push(hire);
+      }
+    } else if (company.status === 'DISTRESSED') {
+      // Shed the most recently taken-on hand (never the owner).
+      const hands = company.employees.filter((e) => e.id !== company.ownerId);
+      const newest = hands.at(-1);
+      if (newest) layOff(company, newest);
+    }
+  }
 }
 
 // Runs once on the transition into CLOSED, acting on live world entities.

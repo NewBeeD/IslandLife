@@ -1,8 +1,15 @@
 import { INDUSTRY_DOMAIN } from '@island/shared';
 import type { WorldState } from '@island/shared';
-import { applyAction, npcDecide, triggerPersonalLoanDefault } from './agents';
+import { applyAction, monthlyConsumption, npcDecide, triggerPersonalLoanDefault } from './agents';
 import { amortizeLoanMonth, checkBankSolvency, loanPaymentDue } from './banking';
-import { applyClosureCascade, checkCompanySolvency, computeCompanyRevenue } from './company';
+import {
+  applyClosureCascade,
+  checkCompanySolvency,
+  computeCompanyRevenue,
+  isFoundedFirm,
+  runFoundedLabour,
+  runFoundedPayroll,
+} from './company';
 import { rollRandomEvents } from './events';
 import { governmentAct } from './government';
 import { chargeTuition } from './education';
@@ -47,10 +54,12 @@ export function simulateOneMonth(world: WorldState): WorldState {
     if (company.status === 'CLOSED') continue;
     const loanPayments = company.loans.reduce((s, l) => s + loanPaymentDue(l), 0);
     const eventLoad = world.events.filter((e) => e.affectedIndustries.includes(company.industry)).length;
-    // baseOperatingCosts is the full monthly cost line (seed costs / 12) and already
-    // includes payroll, so the wage bill is NOT subtracted again here. (Phase 1
-    // simplification: company P&L and the agent-side wage bill are not yet
-    // reconciled cash-for-cash; a later phase will tie payroll to company cash.)
+    // baseOperatingCosts is the firm's non-labour cost line. For a founded firm the
+    // owner draws the residual and any hired hands are paid out of cash (Phase 19.6,
+    // runFoundedPayroll below), so labour does not enter `profit` here — `profit` is
+    // the surplus available to labour, and it drives solvency exactly as before. A
+    // seed firm's `baseOperatingCosts` still folds in its established-economy payroll
+    // (Phase 1 simplification; Phase 20 reconciles incumbent payroll cash-for-cash).
     const operatingCosts = company.baseOperatingCosts * (1 + eventLoad * 0.05);
 
     company.profit = company.monthlyRevenue - loanPayments - operatingCosts;
@@ -60,6 +69,14 @@ export function simulateOneMonth(world: WorldState): WorldState {
     if (status === 'CLOSED') applyClosureCascade(company, world);
     company.status = status;
     company.isSolvent = status !== 'CLOSED';
+
+    // Phase 19.6: the month's surplus flows into the firm's cash, then a founded firm
+    // pays its labour out of that cash — hired hands first (laid off if it cannot
+    // cover them), the owner the residual draw. Wages an NPC-founded firm pays now
+    // reconcile against real firm cash. Seed firms accrue working capital but their
+    // payroll is unchanged (Phase 20's remit).
+    company.cash += company.profit;
+    if (isFoundedFirm(company)) runFoundedPayroll(company);
 
     // Phase 14: pay down whatever loans are still ACTIVE this month so a firm's debt
     // actually falls and a repaid loan closes. A closed company's loans were just
@@ -83,10 +100,11 @@ export function simulateOneMonth(world: WorldState): WorldState {
     // payment is only the remaining balance). The principal is paid down below, once
     // it is clear the agent serviced the loan rather than defaulting.
     const personalLoanPayments = agent.loans.reduce((s, l) => s + loanPaymentDue(l), 0);
-    // Spending = base living costs + lifestyle creep on surplus income, so cash
-    // does not accumulate unboundedly (a crude consumption model for the slice).
-    const surplus = Math.max(0, income - agent.monthlyLivingCosts);
-    const spending = agent.monthlyLivingCosts + 0.5 * surplus;
+    // Phase 19.6: a real consumption model — subsistence living costs plus a declining
+    // marginal propensity to consume on disposable income (the near-subsistence spend
+    // nearly all of it, the comfortable save more), replacing the flat half-of-surplus
+    // rule. Cash still cannot pile up unboundedly, but the wealthy accumulate faster.
+    const spending = monthlyConsumption(income, agent.monthlyLivingCosts);
     // Fuel/upkeep on owned equipment (Phase 7) — 0 for everyone without an upgrade,
     // so NPC and default-player cash math is unchanged (the digest holds). Phase 8:
     // a venture portfolio sums upkeep across its ventures (still 0 for NPCs).
@@ -141,6 +159,12 @@ export function simulateOneMonth(world: WorldState): WorldState {
     if (agent.isPlayer) continue;
     applyAction(agent, npcDecide(agent, world), world);
   }
+
+  // PHASE 6b: founded-firm labour market (P19.6). Firms hire and fire on their own
+  // P&L — a healthy, cash-flush firm takes on a local unemployed hand (and its output
+  // scales up with the labour); a distressed one sheds its newest hand. So unemployment
+  // now moves because firms respond to their fortunes, not a flat hiring constant.
+  runFoundedLabour(world);
 
   // PHASE 7: bank solvency
   for (const bank of world.banks) {
