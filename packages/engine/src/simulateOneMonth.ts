@@ -33,6 +33,7 @@ import {
 } from './ventures';
 import { distributePartnershipProfit, strainFriendDefaults } from './funding';
 import { updateReputation } from './reputation';
+import { decayInformation } from './info';
 import { repossessCollateral, resolvePendingSales } from './assets';
 
 // Consecutive unmet-payment months before the player's loans fall into default
@@ -194,6 +195,13 @@ export function simulateOneMonth(world: WorldState): WorldState {
   // drawn — and nothing moves — for a player without one (the digest holds).
   recoverVentureReputations(world);
   rollVentureScandal(world);
+
+  // PHASE 5d (Phase 22): information goes stale. The player's paid market-research read
+  // decays a step toward nothing each month and a lapsed competitor scout is cleared, so
+  // an information edge is a wasting asset that must be renewed (A1). Player-only and a
+  // no-op for a player who has never bought information, so the no-information baseline
+  // digest holds (S2). Pure of rng.
+  decayInformation(world);
 
   // PHASE 6: NPC decisions
   for (const agent of world.agents) {

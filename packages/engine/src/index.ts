@@ -65,6 +65,23 @@ export {
 } from './reputation';
 export type { ReputationBand } from './reputation';
 export {
+  playerForecasts,
+  forecastVenture,
+  hasForecastableIncome,
+  competitorRead,
+  researchLevelOf,
+  isScouted,
+  decayInformation,
+  buyMarketResearch,
+  buyCompetitorScout,
+  researchCost,
+  scoutCost,
+  InfoError,
+  FORECAST_HORIZON_MONTHS,
+  SCOUT_DURATION_MONTHS,
+} from './info';
+export type { Forecast } from './info';
+export {
   cellRevenue,
   firmCellShare,
   playerCellShare,

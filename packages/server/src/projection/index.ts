@@ -12,6 +12,11 @@ export { toSkillsDTO } from './skills';
 export { toJobsDTO, toTakeJobResultDTO } from './jobs';
 export { toDecisionDTO, toFinancingQuoteDTO } from './decisions';
 export { toVentureActionResultDTO } from './ventures';
+export {
+  toForecastLines,
+  toInformationOffer,
+  toInformationPurchaseResultDTO,
+} from './forecast';
 export { toEducationStatusDTO, toEducationActionResultDTO } from './education';
 export {
   toAssetSaleResultDTO,

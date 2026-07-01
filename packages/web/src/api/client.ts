@@ -12,6 +12,7 @@ import type {
   EducationStatusDTO,
   FeedDTO,
   FinancingQuoteDTO,
+  InformationPurchaseResultDTO,
   JobsDTO,
   LoanActionResultDTO,
   MoneyDTO,
@@ -127,6 +128,11 @@ export const api = {
   // Phase 18 (P18.4): raise money among friends on demand.
   startCrowdfund(saveId: string) {
     return post<CrowdfundStartResultDTO>(`/saves/${saveId}/crowdfund`);
+  },
+  // Phase 22 (P22.2): buy a sharper read — research narrows forecasts, scout reads the
+  // competition.
+  buyInformation(saveId: string, kind: 'research' | 'scout') {
+    return post<InformationPurchaseResultDTO>(`/saves/${saveId}/information/${kind}`);
   },
   // Phase 18 (P18.5): the player's current studies, and pause/resume.
   education(saveId: string) {

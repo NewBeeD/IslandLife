@@ -111,6 +111,31 @@ export interface VentureLineDTO {
   monthlyUpkeep: number; // EC$ fuel/upkeep this month (reduced while shelved)
 }
 
+// A forecast the player reads, always as a RANGE, never a point (Phase 22, C2/C14/A1).
+// The hidden true projection behind the band never crosses the wire (S3) — only the
+// low/high bounds and an in-voice, hedged summary do. The band narrows as the player
+// buys sharper information; a player who buys none reads a wide, honestly-uncertain
+// range. These are the player's own prospective money, like a resale quote — EC$ shown.
+export interface ForecastLineDTO {
+  label: string; // what is being forecast — "the boat", "the juice stand"
+  low: number; // EC$/month — the low end of the likely band
+  high: number; // EC$/month — the high end of the likely band
+  summary: string; // hedged prose, e.g. "if the season holds, somewhere around EC$…–…"
+}
+
+// What better information would cost and buy (Phase 22, P22.2). A standing offer the
+// player can act on: pay for a sharper read (a narrower forecast band) or a scout of
+// how crowded their trade is. `sharpness` reads the player's current research depth as
+// prose, never a number (S3). Absent when there is nothing worth forecasting.
+export interface InformationOfferDTO {
+  sharpness: string; // prose on how good the player's current read is
+  researchCost: number; // EC$ to buy/renew a sharper market-research read
+  researchNote: string; // what the research buys, in prose
+  scoutCost: number; // EC$ to scout the competition in the player's trade
+  scoutNote: string; // what the scout buys, in prose
+  scouted?: string; // present when a fresh scout is in hand — the competitor read, prose
+}
+
 export interface MoneyDTO {
   monthLabel: string;
   cashInHand: number;
@@ -138,6 +163,25 @@ export interface MoneyDTO {
   // owe remember them, as prose, never a score (S3). Absent at a neutral standing, so it
   // appears only once there is something worth remarking on.
   standing?: string;
+  // Forecasts for the player's market-driven ventures (Phase 22) — next season's likely
+  // takings as ranges, never points. Empty when the player has nothing worth forecasting
+  // (only fixed/standing income). The hidden true projection never crosses the wire (S3).
+  forecasts?: ForecastLineDTO[];
+  // What sharper information would cost and buy (Phase 22, P22.2). Absent when there is
+  // nothing to forecast (so no reason to sell the player a read).
+  information?: InformationOfferDTO;
+}
+
+// POST /saves/:id/information/:kind — buy a sharper read (Phase 22, P22.2). Charges the
+// cost from cash, applies it, and returns the player's own money facts plus a short
+// in-voice line. `kind` is 'research' (narrow the forecast band) or 'scout' (a read on
+// the competition). No hidden mechanics — the new sharpness is prose (S3).
+export interface InformationPurchaseResultDTO {
+  kind: 'research' | 'scout';
+  cost: number; // EC$ paid
+  cashInHand: number; // EC$ after the purchase
+  sharpness: string; // the player's read now, in prose
+  acknowledgement: string; // a short in-voice line
 }
 
 // GET /saves/:id/skills — the Skills view (Phase 15, P15.4). The trades the player

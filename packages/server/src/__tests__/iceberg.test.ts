@@ -96,6 +96,11 @@ const GLOBAL_TOKENS = [
   'seenBrokenContracts',
   'customerReputation',
   'reputationCounted',
+  // information economy (Phase 22) — the player's paid research depth & scout freshness
+  // are hidden internals; the player reads their sharpness as prose and their forecasts
+  // as ranges, never these raw numbers (S3). The DTO carries prose + low/high bounds.
+  'researchLevel',
+  'scoutedUntilMonth',
   // legacy (hidden until death)
   'legacyScore',
   'wealthScore',

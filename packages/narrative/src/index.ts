@@ -48,6 +48,7 @@ export {
   buildDecisionAcknowledgement,
   buildJobTakenAcknowledgement,
   buildVentureExitAcknowledgement,
+  buildInformationAcknowledgement,
   generateConsequenceEntry,
   generateEducationCompletionEntry,
 } from './decisions';

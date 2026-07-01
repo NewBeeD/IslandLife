@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import {
   DecisionError,
   EducationError,
+  InfoError,
   JobError,
   LoanError,
   PartnershipError,
@@ -9,6 +10,8 @@ import {
   VentureError,
   applyUpgradeFinancing,
   borrowAgainstAsset,
+  buyCompetitorScout,
+  buyMarketResearch,
   detectDueConsequences,
   detectEducationCompletions,
   discontinueVenture,
@@ -35,6 +38,7 @@ import {
 } from '@island/engine';
 import {
   buildDecisionAcknowledgement,
+  buildInformationAcknowledgement,
   buildJobTakenAcknowledgement,
   buildVentureExitAcknowledgement,
   captureTriggerSnapshot,
@@ -72,6 +76,7 @@ import {
   toEducationStatusDTO,
   toFeedDTO,
   toFinancingQuoteDTO,
+  toInformationPurchaseResultDTO,
   toJobsDTO,
   toLoanActionResultDTO,
   toMoneyDTO,
@@ -579,6 +584,34 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
     };
     return result;
   });
+
+  // POST /saves/:id/information/:kind — buy a sharper read (Phase 22, P22.2). A standing
+  // action: `research` narrows the player's forecast band, `scout` buys a read on how
+  // crowded their trade is. Charges cash, applies it, persists, returns the new sharpness
+  // and a short in-voice line. The forecasts themselves are read from the money view.
+  app.post<{ Params: { id: string; kind: string } }>(
+    '/saves/:id/information/:kind',
+    async (req, reply) => {
+      const loaded = await loadOr404(req.params.id, reply);
+      if (!loaded) return;
+      const { world } = loaded;
+      const { kind } = req.params;
+      if (kind !== 'research' && kind !== 'scout') {
+        return reply.code(400).send({ error: `unknown information kind ${kind}` });
+      }
+      try {
+        const cost = kind === 'research' ? buyMarketResearch(world).cost : buyCompetitorScout(world).cost;
+        const ack = buildInformationAcknowledgement(kind);
+        await saveTick(req.params.id, world);
+        return toInformationPurchaseResultDTO(world, kind, cost, ack);
+      } catch (err) {
+        if (err instanceof InfoError) {
+          return reply.code(err.code === 'NO_CASH' ? 400 : 409).send({ error: err.message });
+        }
+        throw err;
+      }
+    },
+  );
 
   // GET /saves/:id/education — the player's current studies (Phase 18, P18.5): their
   // credential, what they are enrolled in, months left, and whether it is paused.

@@ -409,6 +409,25 @@ export function buildJobTakenAcknowledgement(world: WorldState, taken: TakenJob)
   );
 }
 
+// A short, in-voice line for buying information (Phase 22, P22.3): a research firm's
+// hedged read, or a scout sent round the parish. Frames the purchase as buying a better
+// look at an uncertain thing, never a guarantee — the market keeps the last word. No raw
+// mechanics; passes the voice rules (second person, no numbers-as-certainty).
+export function buildInformationAcknowledgement(kind: 'research' | 'scout'): string {
+  if (kind === 'scout') {
+    return (
+      `You put the word out and send someone to ask around — who is working the trade, how thick on ` +
+      `the ground they are. It costs you a little, and what comes back is only what people will say. ` +
+      `But you would rather know the shape of the water than swim it blind.`
+    );
+  }
+  return (
+    `You pay for a proper look at the season ahead — someone who studies the market for a living, ` +
+    `putting numbers to what you have only felt. It sharpens the picture, though no report ever ` +
+    `promised the sea would keep to it. You would rather plan against a fair guess than a blind one.`
+  );
+}
+
 // The completion MEMORY (Phase 9): months of tuition and tired evenings, now a
 // credential earned. Surfaces the month the program finishes. No mechanics, no
 // claimed outcome the simulation didn't produce — just the weight of having done it.

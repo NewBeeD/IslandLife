@@ -518,6 +518,31 @@ export interface NPCAgent {
   // read as neutral — so they stay byte-identical and the digest holds. Hidden state:
   // the four bands never cross the wire as numbers (S3); the player reads them as prose.
   reputation?: ReputationLedger;
+
+  // ── Phase 22: the information economy (C2/C14/A1) ───────────────────────────
+  // What the player has paid to know. Market-research depth sharpens their forecasts
+  // (narrows the confidence band) and a competitor scout buys a read on how crowded
+  // their trade is — information otherwise hidden. A wasting asset: research goes stale
+  // and decays month to month, a scout goes cold. Maintained for the player only;
+  // undefined for NPCs and a player who has never bought information, who forecast at
+  // the baseline (a wide band, no competitor read) — so they stay byte-identical and the
+  // digest holds. Hidden state: the raw levels never cross the wire (S3) — the player
+  // reads their sharpness as prose and sees only the forecast ranges themselves.
+  information?: PlayerInformation;
+}
+
+// What the player has paid to know (Phase 22). Both fields are hidden internals: the
+// player reads their research sharpness as prose and their forecasts as ranges, never
+// as these raw numbers (the iceberg, S3).
+export interface PlayerInformation {
+  // Market-research depth, 0 (just guessing) … 1 (a sharp, freshly-bought read). Narrows
+  // the forecast confidence band. Bought through the research action; decays toward 0
+  // each month as the information goes stale, so it must be renewed to stay sharp.
+  researchLevel: number;
+  // The last month a competitor scout stays fresh through: while `world.month` is at or
+  // below it, the player holds a current read on how crowded their trade is. Undefined
+  // → never scouted (or gone cold).
+  scoutedUntilMonth?: number;
 }
 
 // The player's multi-dimensional reputation (Phase 21). Every band is 0–1 with a

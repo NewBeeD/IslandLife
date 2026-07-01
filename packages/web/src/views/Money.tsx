@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AssetLine, CollateralQuoteDTO, DebtLine, MoneyDTO, SaleMode } from '@island/shared';
+import type {
+  AssetLine,
+  CollateralQuoteDTO,
+  DebtLine,
+  ForecastLineDTO,
+  InformationOfferDTO,
+  MoneyDTO,
+  SaleMode,
+} from '@island/shared';
 import { api } from '../api/client';
 
 // Selectable repayment terms for a loan secured by an asset (1–5 years).
@@ -235,6 +243,16 @@ export function Money({
         </section>
       )}
 
+      {((money.forecasts && money.forecasts.length > 0) || money.information) && (
+        <ForecastSection
+          saveId={saveId}
+          forecasts={money.forecasts ?? []}
+          information={money.information}
+          cashInHand={money.cashInHand}
+          onChanged={onChanged}
+        />
+      )}
+
       {money.ownership && money.ownership.length > 0 && (
         <section className="money__section">
           <h3>Who owns what</h3>
@@ -268,6 +286,82 @@ export function Money({
         </p>
       ))}
     </div>
+  );
+}
+
+// The season-ahead forecasts (Phase 22) — takings as ranges, never points, framed in
+// voice — and the standing offer to buy a sharper read (research narrows the band) or a
+// competitor scout. The player reads their current sharpness as prose; no raw levels.
+function ForecastSection({
+  saveId,
+  forecasts,
+  information,
+  cashInHand,
+  onChanged,
+}: {
+  saveId: string;
+  forecasts: ForecastLineDTO[];
+  information?: InformationOfferDTO;
+  cashInHand: number;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState<'research' | 'scout' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const buy = async (kind: 'research' | 'scout') => {
+    setBusy(kind);
+    setError(null);
+    try {
+      await api.buyInformation(saveId, kind);
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <section className="money__section">
+      <h3>The season ahead</h3>
+      {forecasts.map((f, i) => (
+        <div className="money__asset" key={i}>
+          <div className="money__line">
+            <span>{f.label}</span>
+            <span>
+              {ec(f.low)}–{ec(f.high)}/mo
+            </span>
+          </div>
+          <p className="money__note muted">{f.summary}</p>
+        </div>
+      ))}
+
+      {information && (
+        <div className="money__asset">
+          <p className="money__note muted">{information.sharpness}</p>
+          {information.scouted && <p className="money__note muted">{information.scouted}</p>}
+          <div className="money__sell">
+            <button
+              type="button"
+              disabled={busy !== null || cashInHand < information.researchCost}
+              title={information.researchNote}
+              onClick={() => buy('research')}
+            >
+              Buy a market read · {ec(information.researchCost)}
+            </button>
+            <button
+              type="button"
+              disabled={busy !== null || cashInHand < information.scoutCost}
+              title={information.scoutNote}
+              onClick={() => buy('scout')}
+            >
+              Scout the competition · {ec(information.scoutCost)}
+            </button>
+          </div>
+          {error && <p className="error">{error}</p>}
+        </div>
+      )}
+    </section>
   );
 }
 
