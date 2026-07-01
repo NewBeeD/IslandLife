@@ -12,7 +12,7 @@ import {
 } from './company';
 import { rollRandomEvents } from './events';
 import { governmentAct } from './government';
-import { recomputeMacro } from './macro';
+import { macroLendingAppetiteFactor, recomputeMacro } from './macro';
 import { chargeTuition } from './education';
 import { computeLegacyIncrement } from './legacy';
 import { updateMarketPrice } from './market';
@@ -35,8 +35,12 @@ export function simulateOneMonth(world: WorldState): WorldState {
   for (const e of world.events) e.durationRemaining -= 1;
   world.events = [...world.events.filter((e) => e.durationRemaining > 0), ...newEvents];
 
-  // PHASE 2: market prices
-  for (const market of world.markets) updateMarketPrice(market, world.events, month, world.goods);
+  // PHASE 2: market prices. The macro web scales each good's effective demand by the
+  // aggregate-demand cycle (P20.2), so a downturn pulls prices — and firm revenue —
+  // down, the loop's core amplifying edge. The macro read here is *last* month's state
+  // (recomputed in Phase 8b below), the correct one-month lag.
+  for (const market of world.markets)
+    updateMarketPrice(market, world.events, month, world.goods, world.macro);
 
   // PHASE 3: company revenue
   for (const company of world.companies) {
@@ -177,7 +181,11 @@ export function simulateOneMonth(world: WorldState): WorldState {
     bank.state = status;
     bank.nonPerformingLoanRatio = nplRatio;
     const factor = status === 'INSOLVENT' ? 0 : status === 'DISTRESSED' ? 0.4 : status === 'STRESSED' ? 0.7 : 1;
-    bank.lendingAppetite = bank.baseLendingAppetite * factor;
+    // Phase 20: a systemic-credit shock (a systemically-important bank failing, P20.3)
+    // contracts every bank's appetite at once, not just the failed one's borrowers —
+    // the interbank freeze. macroLendingAppetiteFactor is 1 in calm times, so this is
+    // byte-identical until a systemic shock actually lands.
+    bank.lendingAppetite = bank.baseLendingAppetite * factor * macroLendingAppetiteFactor(world.macro);
   }
 
   // Write off a fraction of defaulted debt each month so bank books (and NPL)
@@ -199,6 +207,11 @@ export function simulateOneMonth(world: WorldState): WorldState {
   // are read by *next* month's markets, banks, and firms (the write side, P20.2),
   // giving the loop its months-long, mean-reverting propagation. Pure of rng.
   recomputeMacro(world);
+  // Public sentiment is the household mood the macro web produces — set it from
+  // consumer confidence so the wider economy's swings reach the systems that already
+  // read sentiment: the NPC decision engine's cycle read (marketHeat drives herd/panic
+  // founding, P19.4, wired for exactly this) and the narrative's economy voice (P20.5).
+  world.government.publicSentiment = world.macro.consumerConfidence;
 
   // PHASE 9: knowledge & experience
   for (const agent of world.agents) {

@@ -197,10 +197,11 @@ export function macroInterestRate(world: Pick<WorldState, 'macro' | 'country'>):
   return world.macro?.effectiveInterestRate ?? world.country.baseInterestRate;
 }
 
-// How open credit is, as a multiplier on how far a bank will stretch a loan (0–~1.1).
-// Centered so the resting baseline neither inflates nor squeezes the pre-P20 ceiling.
+// How open credit is, as a multiplier on how far a bank will stretch a loan. Centered
+// on the resting baseline (CREDIT_BASELINE → 1.0), so calm credit neither inflates nor
+// squeezes the pre-P20 ceiling; it tightens below 1 as availability falls, eases above.
 export function macroCreditMultiplier(macro: MacroState): number {
-  return clamp(0.6 + macro.creditAvailability, 0.4, 1.3);
+  return clamp(macro.creditAvailability + (1 - CREDIT_BASELINE), 0.5, 1.3);
 }
 
 // The system-wide haircut a systemic-credit shock puts on every bank's lending

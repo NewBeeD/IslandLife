@@ -1,6 +1,7 @@
 import type { Bank, BankState, Industry, Loan, NPCAgent, WorldState } from '@island/shared';
 import { clamp, clamp01 } from './rng';
 import { findBorrowerAsset } from './assets';
+import { macroCreditMultiplier, macroInterestRate } from './macro';
 
 // Recomputes a bank's non-performing-loan ratio from the live loan set and maps
 // it to a state. Guards divide-by-zero (no active loans -> ratio 0).
@@ -244,7 +245,10 @@ export function assessLoanApplication(
   collateralValue = 0,
 ): LoanAssessment {
   const bank = chooseBank(world, applicant);
-  const baseRate = world.country.baseInterestRate;
+  // Phase 20: loans are priced off the island's *effective* rate — the country base
+  // plus the macro spread that widens when defaults rise and credit tightens (the
+  // rates → borrowing edge). Falls back to the country base when no macro is present.
+  const baseRate = macroInterestRate(world);
   const term = Math.max(1, Math.round(termMonths));
 
   // Paying cash (or nearly so): no loan to assess.
@@ -302,8 +306,11 @@ export function assessLoanApplication(
   const maxLtv = 0.8 + 0.15 * score;
   const maxByCollateral = secured ? collateralValue * maxLtv : Infinity;
   let ceiling = Math.floor(Math.min(maxByIncome, maxByCollateral) / 100) * 100;
-  // Bank appetite scales how much it will stretch.
-  ceiling = Math.floor((ceiling * (0.7 + 0.6 * bank.lendingAppetite)) / 100) * 100;
+  // Bank appetite scales how much it will stretch, and the macro credit cycle scales it
+  // further (P20.2): when credit is tight island-wide the bank lends less against the
+  // same borrower; when it is open, more. The multiplier is 1 at the resting baseline.
+  const stretch = (0.7 + 0.6 * bank.lendingAppetite) * macroCreditMultiplier(world.macro);
+  ceiling = Math.floor((ceiling * stretch) / 100) * 100;
 
   if (ceiling < 300) {
     return {
