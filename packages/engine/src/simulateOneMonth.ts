@@ -1,7 +1,13 @@
 import { INDUSTRY_DOMAIN } from '@island/shared';
 import type { WorldState } from '@island/shared';
 import { applyAction, monthlyConsumption, npcDecide, triggerPersonalLoanDefault } from './agents';
-import { amortizeLoanMonth, checkBankSolvency, loanPaymentDue } from './banking';
+import {
+  amortizeLoanMonth,
+  checkBankSolvency,
+  loanPaymentDue,
+  systemicImportance,
+  systemicShockMagnitude,
+} from './banking';
 import {
   applyClosureCascade,
   checkCompanySolvency,
@@ -12,7 +18,7 @@ import {
 } from './company';
 import { rollRandomEvents } from './events';
 import { governmentAct } from './government';
-import { macroLendingAppetiteFactor, recomputeMacro } from './macro';
+import { injectSystemicShock, macroLendingAppetiteFactor, recomputeMacro } from './macro';
 import { chargeTuition } from './education';
 import { computeLegacyIncrement } from './legacy';
 import { updateMarketPrice } from './market';
@@ -171,21 +177,35 @@ export function simulateOneMonth(world: WorldState): WorldState {
   // now moves because firms respond to their fortunes, not a flat hiring constant.
   runFoundedLabour(world);
 
-  // PHASE 7: bank solvency
+  // PHASE 7: bank solvency & interbank linkage (P20.3). Pass 1 recomputes each bank's
+  // state and detects a *systemically-important* bank freshly failing — one whose
+  // weight in the interbank web (its share of system assets) is large enough that its
+  // collapse freezes the whole market. Such a failure injects a systemic-credit shock.
+  const allLoans = [
+    ...world.agents.flatMap((a) => a.loans),
+    ...world.companies.flatMap((c) => c.loans),
+  ];
   for (const bank of world.banks) {
-    const bankLoans = [
-      ...world.agents.flatMap((a) => a.loans),
-      ...world.companies.flatMap((c) => c.loans),
-    ].filter((l) => l.bankId === bank.id);
+    const prevState = bank.state;
+    const bankLoans = allLoans.filter((l) => l.bankId === bank.id);
     const { status, nplRatio } = checkBankSolvency(bank, bankLoans);
     bank.state = status;
     bank.nonPerformingLoanRatio = nplRatio;
-    const factor = status === 'INSOLVENT' ? 0 : status === 'DISTRESSED' ? 0.4 : status === 'STRESSED' ? 0.7 : 1;
-    // Phase 20: a systemic-credit shock (a systemically-important bank failing, P20.3)
-    // contracts every bank's appetite at once, not just the failed one's borrowers —
-    // the interbank freeze. macroLendingAppetiteFactor is 1 in calm times, so this is
-    // byte-identical until a systemic shock actually lands.
-    bank.lendingAppetite = bank.baseLendingAppetite * factor * macroLendingAppetiteFactor(world.macro);
+    if (prevState !== 'INSOLVENT' && status === 'INSOLVENT') {
+      const magnitude = systemicShockMagnitude(systemicImportance(bank, world.banks));
+      if (magnitude > 0) injectSystemicShock(world.macro, magnitude);
+    }
+  }
+  // Pass 2 sets every bank's appetite from its own state AND the system-wide credit
+  // shock — so a big failure contracts appetite even at solvent banks (solvent firms
+  // lose their line, refinancing dries up), the interbank freeze the P20.2 loop then
+  // amplifies. macroLendingAppetiteFactor is 1 in calm times, so this is byte-identical
+  // until a systemic shock actually lands.
+  const systemicFactor = macroLendingAppetiteFactor(world.macro);
+  for (const bank of world.banks) {
+    const s = bank.state;
+    const factor = s === 'INSOLVENT' ? 0 : s === 'DISTRESSED' ? 0.4 : s === 'STRESSED' ? 0.7 : 1;
+    bank.lendingAppetite = bank.baseLendingAppetite * factor * systemicFactor;
   }
 
   // Write off a fraction of defaulted debt each month so bank books (and NPL)

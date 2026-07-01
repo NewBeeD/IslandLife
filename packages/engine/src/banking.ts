@@ -24,6 +24,30 @@ export function checkBankSolvency(
   return { status, nplRatio };
 }
 
+// ── Interbank linkage & systemic importance (P20.3, A22) ─────────────────────
+// Banks are nodes in an interbank web, and a bank's weight in that web is its share
+// of total system assets — the claims the rest of the system holds on it. A big node
+// failing freezes the interbank market and, through the macro loop (P20.2), credit
+// island-wide; a small one is absorbed. We model the web through this single derived
+// weight rather than a full N×N claims matrix (S8 — few well-connected variables).
+
+// A bank holding at least this share of system assets is systemically important —
+// below it, a failure is an isolated bankruptcy, not a crisis.
+export const SYSTEMIC_IMPORTANCE_THRESHOLD = 0.25;
+
+// A bank's share of total system assets — its weight in the interbank web.
+export function systemicImportance(bank: Bank, banks: readonly Bank[]): number {
+  const total = banks.reduce((s, b) => s + b.totalAssets, 0);
+  return total > 0 ? bank.totalAssets / total : 0;
+}
+
+// The systemic-credit shock a bank's failure injects: nothing below the importance
+// threshold (an isolated failure), scaling with its weight above it (a big node
+// freezes more of the system). Deterministic.
+export function systemicShockMagnitude(importance: number): number {
+  return importance >= SYSTEMIC_IMPORTANCE_THRESHOLD ? importance : 0;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PHASE 7 — player loan applications (the P-B3 player slice).
 //

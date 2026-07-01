@@ -209,3 +209,11 @@ export function macroCreditMultiplier(macro: MacroState): number {
 export function macroLendingAppetiteFactor(macro: MacroState): number {
   return clamp01(1 - 0.7 * macro.systemicStress);
 }
+
+// Inject a systemic-credit shock (P20.3): raise systemic stress to at least `magnitude`
+// (never lowering an existing, larger shock). Called when a systemically-important bank
+// fails, so the freeze it causes ripples through the P20.2 loop — every bank's appetite
+// contracts, credit tightens, and the rate spread widens, island-wide. Pure arithmetic.
+export function injectSystemicShock(macro: MacroState, magnitude: number): void {
+  macro.systemicStress = clamp01(Math.max(macro.systemicStress, magnitude));
+}

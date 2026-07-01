@@ -14,6 +14,9 @@ export {
   setLoanInstallment,
   amortizeLoanMonth,
   loanPaymentDue,
+  systemicImportance,
+  systemicShockMagnitude,
+  SYSTEMIC_IMPORTANCE_THRESHOLD,
   LoanError,
 } from './banking';
 export type { LoanAssessment, CollateralQuote } from './banking';
@@ -46,6 +49,7 @@ export {
   macroInterestRate,
   macroCreditMultiplier,
   macroLendingAppetiteFactor,
+  injectSystemicShock,
 } from './macro';
 export { governmentAct, computeTaxRevenue } from './government';
 export { computeLegacyIncrement, netWorthOf } from './legacy';
