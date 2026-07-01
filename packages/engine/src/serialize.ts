@@ -6,6 +6,7 @@ import type {
   Government,
   JobPosting,
   LegacyScore,
+  MacroState,
   Market,
   NPCAgent,
   Opportunity,
@@ -15,6 +16,7 @@ import type {
   WorldEvent,
   WorldState,
 } from '@island/shared';
+import { initialMacroState } from './macro';
 import { createRng } from './rng';
 
 // The entity graph has cycles (agent.employer <-> company.employees) and the
@@ -31,10 +33,11 @@ export interface SerializedCompany extends Omit<Company, 'employees'> {
 }
 
 export interface SerializedWorld {
-  // v2 (Phase 19): agents gained an optional `observations` ring. The field is
-  // additive — a v1 snapshot simply has no memory, which deserializes to an empty
-  // ring — so the migration path is implicit (P-X4).
-  schemaVersion: 2;
+  // v2 (Phase 19): agents gained an optional `observations` ring. v3 (Phase 20): the
+  // world gained a derived `macro` state. Both are additive — an older snapshot simply
+  // lacks them and deserializes to the neutral defaults (an empty ring, a baseline
+  // macro), so the migration path stays implicit (P-X4).
+  schemaVersion: 3;
   seed: number;
   month: number;
   rngState: RngState;
@@ -48,6 +51,8 @@ export interface SerializedWorld {
   agents: SerializedAgent[];
   government: Government;
   events: WorldEvent[];
+  // The economic web (Phase 20) — derived, recomputed on the first tick after load.
+  macro: MacroState;
   playerLegacy: LegacyScore;
   playerNotifications: string[];
   opportunities: Opportunity[];
@@ -68,7 +73,7 @@ export function serializeWorld(world: WorldState): SerializedWorld {
   });
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     seed: world.seed,
     month: world.month,
     rngState: world.rng.serialize(),
@@ -82,6 +87,7 @@ export function serializeWorld(world: WorldState): SerializedWorld {
     agents,
     government: clone(world.government),
     events: clone(world.events),
+    macro: clone(world.macro),
     playerLegacy: clone(world.playerLegacy),
     playerNotifications: clone(world.playerNotifications),
     opportunities: clone(world.opportunities),
@@ -141,6 +147,9 @@ export function deserializeWorld(s: SerializedWorld): WorldState {
     player,
     government: clone(s.government),
     events: clone(s.events),
+    // Phase 20: default to the neutral baseline for snapshots written before the macro
+    // web existed; it is recomputed from aggregates on the first tick regardless.
+    macro: s.macro ? clone(s.macro) : initialMacroState(s.country.baseInterestRate),
     playerLegacy: clone(s.playerLegacy),
     playerNotifications: clone(s.playerNotifications),
     // Default for snapshots written before Phase 6 added these fields.

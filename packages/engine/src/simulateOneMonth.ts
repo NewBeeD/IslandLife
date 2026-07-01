@@ -12,6 +12,7 @@ import {
 } from './company';
 import { rollRandomEvents } from './events';
 import { governmentAct } from './government';
+import { recomputeMacro } from './macro';
 import { chargeTuition } from './education';
 import { computeLegacyIncrement } from './legacy';
 import { updateMarketPrice } from './market';
@@ -191,6 +192,13 @@ export function simulateOneMonth(world: WorldState): WorldState {
   world.government.unemploymentRate =
     world.agents.filter((a) => a.employmentStatus === 'UNEMPLOYED').length / world.agents.length;
   governmentAct(world.government, world);
+
+  // PHASE 8b: the economic web (Phase 20). Recompute the macro variables from the
+  // month's outcome — unemployment (Phase 8), bank health (Phase 7), firm profit
+  // (Phase 4) — so the cascade's feedback edges advance one step. The fresh values
+  // are read by *next* month's markets, banks, and firms (the write side, P20.2),
+  // giving the loop its months-long, mean-reverting propagation. Pure of rng.
+  recomputeMacro(world);
 
   // PHASE 9: knowledge & experience
   for (const agent of world.agents) {

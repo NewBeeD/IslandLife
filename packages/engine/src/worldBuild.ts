@@ -22,6 +22,7 @@ import type {
   WorldState,
 } from '@island/shared';
 import { startingWorkingCapital } from './company';
+import { initialMacroState } from './macro';
 import { createCharacter, hydratePlayerInto } from './characterCreation';
 import type { CreationChoices } from './characterCreation';
 import { clamp01, createRng } from './rng';
@@ -250,6 +251,7 @@ export function buildWorld(seed: number, opts: BuildOptions = {}): WorldState {
     player,
     government,
     events: [],
+    macro: initialMacroState(country.baseInterestRate),
     playerLegacy: {
       wealthScore: 0, familyScore: 0, communityScore: 0,
       innovationScore: 0, environmentScore: 0, reputationScore: 0,

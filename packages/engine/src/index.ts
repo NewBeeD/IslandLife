@@ -39,6 +39,14 @@ export {
 } from './company';
 export type { FirmEconomics } from './company';
 export { rollRandomEvents } from './events';
+export {
+  recomputeMacro,
+  initialMacroState,
+  macroDemandMultiplier,
+  macroInterestRate,
+  macroCreditMultiplier,
+  macroLendingAppetiteFactor,
+} from './macro';
 export { governmentAct, computeTaxRevenue } from './government';
 export { computeLegacyIncrement, netWorthOf } from './legacy';
 export {

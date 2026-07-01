@@ -528,6 +528,44 @@ export interface WorldEvent {
   affectedIndustries: Industry[];
 }
 
+// ── The economic web (Phase 20) ──────────────────────────────────────────────
+// A handful of tightly-connected macro variables — the dense feedback loop that is
+// the actual source of Democracy-4 depth (#26). Every field is DERIVED and recomputed
+// each month from the others plus the agent/firm/bank aggregates (S5); none is a
+// hand-edited source of truth. The variables read and write each other so one event
+// (a rate shock, a hurricane, a bank failure) ripples through many systems for months
+// and then mean-reverts. Hidden internals — they never cross the wire as raw numbers
+// (the iceberg, S3); the player reads the *mood* they produce, in prose. Round-trips
+// with the snapshot but is recomputed on the first tick, so it is never trusted as
+// stored truth. Defaulted to a neutral baseline on deserialize (P-X4).
+export interface MacroState {
+  // The effective island-wide cost of credit: the country base rate plus a spread
+  // that widens as defaults rise and credit tightens (the loop's closing edge —
+  // banks tighten → rates effectively ↑). Annual, like every other rate.
+  effectiveInterestRate: number;
+  // Banks' collective willingness to lend, 0–1. Contracts as defaults rise and, on a
+  // systemically-important bank failure (P20.3), across the whole system at once.
+  creditAvailability: number;
+  // Aggregate consumer demand, centered on 1.0. Falls with unemployment and a sour
+  // consumer mood; feeds market demand → prices → firm revenue.
+  aggregateDemand: number;
+  // Construction-sector activity, centered on 1.0. Cheap, available credit and
+  // confident firms build; a rate spike throttles it (rates ↑ → borrowing ↓ →
+  // construction ↓ → input demand ↓).
+  constructionActivity: number;
+  // Firms' collective optimism, 0–1. Reads recent firm profitability and the credit
+  // climate; gates NPC firm formation and hiring appetite.
+  businessConfidence: number;
+  // Households' collective optimism, 0–1. Reads unemployment with its own inertia;
+  // drives aggregate demand and the government's public sentiment.
+  consumerConfidence: number;
+  // A transient systemic-credit shock, 0–1, that spikes when a systemically-important
+  // bank fails (P20.3) and decays back to 0 over months. While elevated it drags
+  // creditAvailability down and the rate spread up across every bank, turning an
+  // isolated failure into a possible island-wide crunch. 0 in normal times.
+  systemicStress: number;
+}
+
 export interface LegacyScore {
   wealthScore: number;
   familyScore: number;
@@ -837,6 +875,9 @@ export interface WorldState {
   player: NPCAgent;
   government: Government;
   events: WorldEvent[];
+  // The economic web (Phase 20) — derived macro variables recomputed each tick from
+  // the world's aggregates, feeding back into markets, banks, and firm behaviour.
+  macro: MacroState;
   playerLegacy: LegacyScore;
   playerNotifications: string[];
   // Opportunities surfaced to the player and the decisions they present (Phase 6).
