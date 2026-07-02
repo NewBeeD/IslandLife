@@ -38,12 +38,16 @@ export interface SerializedWorld {
   // `reputation` ledger and ventures an optional `customerReputation` demand memory. v5
   // (Phase 22): the player gained an optional `information` ledger (paid research depth &
   // a competitor scout). v6 (Phase 23): the macro state gained `inputCostPressure` &
-  // `supplyDisruption` (scarce inputs & logistics). All additive — an older snapshot
-  // simply lacks them and deserializes to the neutral defaults (an empty ring, a baseline
-  // macro, a neutral ledger built on first tick, a whole customer name, no paid
-  // information, calm inputs at pressure 1.0), so the migration path stays implicit
-  // (P-X4). The macro is derived and recomputed on the first tick regardless.
-  schemaVersion: 6;
+  // `supplyDisruption` (scarce inputs & logistics). v7 (Phase 24): the player's assets
+  // gained an optional `acquiredMonth` (its vintage, driving depreciation) and `obsolete`
+  // (set by a technology step). All additive — an older snapshot simply lacks them and
+  // deserializes to the neutral defaults (an empty ring, a baseline macro, a neutral
+  // ledger built on first tick, a whole customer name, no paid information, calm inputs at
+  // pressure 1.0, untracked assets that never age), so the migration path stays implicit
+  // (P-X4). The macro is derived and recomputed on the first tick regardless. The Phase 24
+  // taste drift, parish culture, and black swans persist nothing — they are derived reads
+  // and (seed, month) side-streams, recomputed identically on load.
+  schemaVersion: 7;
   seed: number;
   month: number;
   rngState: RngState;
@@ -92,7 +96,7 @@ export function serializeWorld(world: WorldState): SerializedWorld {
   });
 
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     seed: world.seed,
     month: world.month,
     rngState: world.rng.serialize(),

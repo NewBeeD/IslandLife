@@ -265,6 +265,47 @@ export const WEB_TEMPLATES: Template[] = [
       `it costs you to work has, and the difference comes straight off the top. The ones who kept ` +
       `a little put by, or who never leaned hard on things brought from far, feel it least.`,
   },
+  {
+    // Phase 24.5 — a black swan: a rare, island-reshaping shock. Weighted a little heavier
+    // than an ordinary observation because when one lands it is the story of the month.
+    id: 'BLACK_SWAN',
+    type: 'OBSERVATION',
+    weight: 2,
+    match: (c) => c.blackSwan !== null,
+    render: (c) => {
+      switch (c.blackSwan) {
+        case 'PANDEMIC':
+          return (
+            `A sickness has come to the island, and everything has gone quiet with it. The ` +
+            `guesthouses around ${c.parishName} are empty, the buses run half-full, and people keep ` +
+            `to their yards. Whatever trade leaned on visitors or on a crowd has fallen away at a ` +
+            `stroke, and no one can say how long it holds. The ones who find another way to earn ` +
+            `while it lasts are the ones who come through it.`
+          );
+        case 'TECH_DISRUPTION':
+          return (
+            `Word has come of a new way of doing things — cheaper, faster, brought in from away — ` +
+            `and it has turned the ground under more than one trade. What was a good living last ` +
+            `year earns less this year for the same sweat, and around ${c.parishName} people are ` +
+            `weighing whether to change with it or hold to what they know. The trades that adapt ` +
+            `will be the ones still standing when the dust settles.`
+          );
+        case 'MAJOR_SPILL':
+          return (
+            `Something has fouled the water and the word has spread fast. The catch is off, the ` +
+            `beaches near ${c.parishName} sit empty, and the ground itself is under a shadow of ` +
+            `doubt. It is the kind of blow that does not care how careful you were — it lands on ` +
+            `everyone who works the coast, and the recovery will be slow and uneven.`
+          );
+        default:
+          return (
+            `Something has come out of nowhere and knocked the season sideways. Around ` +
+            `${c.parishName} the old certainties do not quite hold, and everyone is working out ` +
+            `what the new shape of things asks of them.`
+          );
+      }
+    },
+  },
 ];
 
 // ── Flavor: season and community texture, so a quiet month still reads as a life

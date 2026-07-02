@@ -59,13 +59,18 @@ describe('Phase 22 — forecasts as ranges (P22.1)', () => {
   it('the true outcome lands inside the band most of the time, but not always', () => {
     // Forecast a fishing venture's take, advance a season, and check the realised take
     // lands in the band. Across many seeds this should hold most of the time — but not
-    // always (a forecast is an edge, not an oracle, C14).
+    // always (a forecast is an edge, not an oracle, C14). We use a genuinely volatile
+    // venture here: a calm, low-volatility trade is reliably forecastable over a short
+    // horizon (Phase 24's parish-culture regime lifts a fishing town's price into a range
+    // the wide unaided band comfortably brackets), so the "not an oracle" tail only shows
+    // up on a business that actually swings hard month to month.
     const HORIZON = 3;
     let hits = 0;
     let total = 0;
-    for (let seed = 1; seed <= 40; seed++) {
+    for (let seed = 1; seed <= 50; seed++) {
       const world = buildWorld(seed, { population: 120 });
       const v = giveFishingVenture(world);
+      v.profile = { successBias: 1, volatility: 0.42 };
       // Settle a few months so prices/macro are live, then forecast.
       for (let i = 0; i < 4; i++) {
         updatePlayerIncome(world);

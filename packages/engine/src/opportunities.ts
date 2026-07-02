@@ -1018,6 +1018,9 @@ function applyUpgrade(
     // portfolio is untouched.
     venture.assets.push({
       id: `${spec.id}@${venture.id}`, type: spec.assetType, size: spec.assetSize, value: spec.assetPrice,
+      // Phase 24.3: fresh gear — stamp its vintage so it starts to age from now, and it
+      // renews the venture (the output bump above offsets accumulated wear).
+      acquiredMonth: world.month,
     });
     venture.outputScale += spec.outputScaleDelta;
     venture.monthlyOperatingCosts += spec.operatingCostDelta;
@@ -1029,6 +1032,7 @@ function applyUpgrade(
   } else {
     p.economicAssets.push({
       id: spec.id, type: spec.assetType, size: spec.assetSize, value: spec.assetPrice,
+      acquiredMonth: world.month, // Phase 24.3: fresh gear ages from now on
     });
     p.outputScale = (p.outputScale ?? 1) + spec.outputScaleDelta;
     p.monthlyOperatingCosts = (p.monthlyOperatingCosts ?? 0) + spec.operatingCostDelta;
@@ -1099,6 +1103,7 @@ function applyNewVenture(
           id: `${spec.id}@${ventureId}`,
           type: ventureAssetType(spec.industry),
           value: spec.entryCost,
+          acquiredMonth: world.month, // Phase 24.3: the venture's equipment ages from now
           ...(assetBacked ? { monthlyUpkeep: spec.operatingCost } : {}),
         }
       : null;

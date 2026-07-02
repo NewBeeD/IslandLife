@@ -58,7 +58,16 @@ export {
   inputsAreScarce,
   SUPPLY_CHAIN_FRAGILITY,
 } from './supply';
-export { SUPPLY_DISRUPTION_EVENT_IDS } from './events';
+export {
+  SUPPLY_DISRUPTION_EVENT_IDS,
+  BLACK_SWAN_EVENT_IDS,
+  LOGISTICS_SHOCK_EVENT_IDS,
+} from './events';
+export {
+  tasteDriftMultiplier,
+  cultureDemandMultiplier,
+  PARISH_CULTURE,
+} from './tastes';
 export { governmentAct, computeTaxRevenue } from './government';
 export {
   updateReputation,
@@ -242,6 +251,9 @@ export {
   JOB_VENTURE_ID,
 } from './jobs';
 export type { TakeJobResult } from './jobs';
+export { agePlayerAssets } from './aging';
+export { fundResearch, researchCost as researchProjectCost, ResearchError } from './research';
+export type { ResearchOutcome, ResearchResult } from './research';
 export {
   resaleQuote,
   sellAssetNow,

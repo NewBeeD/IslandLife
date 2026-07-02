@@ -36,6 +36,7 @@ import { distributePartnershipProfit, strainFriendDefaults } from './funding';
 import { updateReputation } from './reputation';
 import { decayInformation } from './info';
 import { repossessCollateral, resolvePendingSales } from './assets';
+import { agePlayerAssets } from './aging';
 
 // Consecutive unmet-payment months before the player's loans fall into default
 // (Phase 7). NPCs default on the first month they cannot cover (unchanged).
@@ -55,9 +56,11 @@ export function simulateOneMonth(world: WorldState): WorldState {
   // PHASE 2: market prices. The macro web scales each good's effective demand by the
   // aggregate-demand cycle (P20.2), so a downturn pulls prices — and firm revenue —
   // down, the loop's core amplifying edge. The macro read here is *last* month's state
-  // (recomputed in Phase 8b below), the correct one-month lag.
+  // (recomputed in Phase 8b below), the correct one-month lag. Phase 24: the seed turns
+  // on the evolving-market demand reads — each good's slow taste drift and its parish's
+  // cultural lean — neutral at month 0, so a fresh world is byte-identical.
   for (const market of world.markets)
-    updateMarketPrice(market, world.events, month, world.goods, world.macro);
+    updateMarketPrice(market, world.events, month, world.goods, world.macro, world.seed);
 
   // PHASE 3: company revenue
   for (const company of world.companies) {
@@ -310,6 +313,13 @@ export function simulateOneMonth(world: WorldState): WorldState {
     }
     agent.previousMonthCapital = agent.cash;
   }
+
+  // PHASE 9c (Phase 24.3): the player's gear ages. Value slides, upkeep creeps, and an
+  // un-renewed venture's output eases down over years; a rare technology step can render a
+  // whole asset class obsolete at a stroke. Pure of world.rng (wear is arithmetic on age,
+  // the tech step rolls a side-stream), and a no-op for a player with no tracked assets, so
+  // the default-player digest holds (S2). Runs before legacy so net worth reflects the wear.
+  agePlayerAssets(world);
 
   // PHASE 10: legacy
   world.playerLegacy = computeLegacyIncrement(world.player, world);

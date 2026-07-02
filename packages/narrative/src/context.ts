@@ -41,8 +41,17 @@ export interface MonthContext {
   // fuel/materials/skilled hands, or a route is cut — felt as a qualitative squeeze,
   // never the raw multiplier (the iceberg, S3).
   inputsScarce: boolean;
+  // The evolving market (Phase 24.5): the definitionId of a live black swan — a pandemic,
+  // a technology upheaval, a major spill — or null when none is running. A rare, island-
+  // reshaping shock the voice names in plain terms, never as a severity number (S3).
+  blackSwan: string | null;
   rand: () => number; // deterministic in (seed, month); never touches world.rng
 }
+
+// The black-swan event kinds (Phase 24.5), mirrored here as plain ids so the narrative
+// layer needs no dependency on the engine (it reads world.events directly). Kept in step
+// with BLACK_SWAN_EVENT_IDS in the engine's events module.
+const BLACK_SWAN_IDS: ReadonlySet<string> = new Set(['PANDEMIC', 'TECH_DISRUPTION', 'MAJOR_SPILL']);
 
 export interface Template {
   id: string;
@@ -122,6 +131,8 @@ export function buildContext(world: WorldState): MonthContext {
   // read qualitatively off the macro state, never the raw multiplier (S3). Tolerant of a
   // pre-P23 macro (the fields default to calm).
   const inputsScarce = (macro.inputCostPressure ?? 1) > 1.12 || (macro.supplyDisruption ?? 0) > 0.2;
+  // A live black swan reshaping the island (Phase 24.5) — named for the voice, not scored.
+  const blackSwan = world.events.find((e) => BLACK_SWAN_IDS.has(e.definitionId))?.definitionId ?? null;
 
   const rand = mulberry32((Math.imul(world.seed >>> 0, 2654435761) + month * 40503) >>> 0);
 
@@ -146,6 +157,7 @@ export function buildContext(world: WorldState): MonthContext {
     creditTight,
     tradeCrowded,
     inputsScarce,
+    blackSwan,
     rand,
   };
 }

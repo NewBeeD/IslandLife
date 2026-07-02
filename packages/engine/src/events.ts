@@ -62,6 +62,53 @@ export const SUPPLY_DISRUPTION_EVENT_IDS: ReadonlySet<string> = new Set(
   SUPPLY_EVENTS.map((d) => d.id),
 );
 
+// Phase 24.5 — black swans (A7). A rare-event layer distinct from the seasonal weather
+// above: low-probability, high-impact shocks that reshape what the best strategy is —
+// a pandemic that empties the guesthouses and the buses, a technology step that guts a
+// trade's margins, a major spill that poisons the fishing grounds and the beaches. They
+// hit hard (a severe, broad, long shock through the ordinary event→revenue plumbing) and
+// then pass, so the optimal trade genuinely changes over a long run rather than settling
+// into a solved equilibrium. Calibrated RARE — a couple across a twenty-year game, not an
+// annual occurrence — and un-seasoned (they can strike any month). Like the Phase 23
+// supply events they are rolled OFF world.rng (see rollRandomEvents), on their own
+// (seed, month) side-stream independent of both world.rng and the supply stream, so the
+// pre-existing seed stream stays byte-identical until a swan actually lands and legitimately
+// moves the economy. The macro web propagates the blow through the aggregates (revenue →
+// profit → confidence → demand), and a spill/pandemic additionally squeezes logistics.
+const BLACK_SWAN_EVENTS: EventDef[] = [
+  {
+    id: 'PANDEMIC', probability: 0.0025, seasonMonths: null,
+    severityRange: [0.6, 0.95], durationRange: [4, 10],
+    affectedIndustries: ['TOURISM', 'RETAIL', 'TRANSPORTATION', 'FISHING'],
+  },
+  {
+    id: 'TECH_DISRUPTION', probability: 0.0025, seasonMonths: null,
+    severityRange: [0.4, 0.8], durationRange: [6, 12],
+    affectedIndustries: ['RETAIL', 'FINANCE', 'TRANSPORTATION'],
+  },
+  {
+    id: 'MAJOR_SPILL', probability: 0.0025, seasonMonths: null,
+    severityRange: [0.5, 0.9], durationRange: [4, 9],
+    affectedIndustries: ['FISHING', 'TOURISM', 'AGRICULTURE'],
+  },
+];
+
+// The black-swan event kinds (Phase 24.5), for voice and for the macro web. A live spill
+// or pandemic also chokes the movement of goods, so these count toward the logistics
+// squeeze alongside the Phase 23 route disruptions.
+export const BLACK_SWAN_EVENT_IDS: ReadonlySet<string> = new Set(
+  BLACK_SWAN_EVENTS.map((d) => d.id),
+);
+
+// The event kinds that squeeze island-wide logistics (Phase 23.2 route cuts plus the
+// Phase 24.5 swans that strand goods — a pandemic's shuttered ports, a spill's closed
+// coast). The macro web reads live events of these kinds to raise supplyDisruption.
+const SUPPLY_SWANS: ReadonlySet<string> = new Set(['PANDEMIC', 'MAJOR_SPILL']);
+export const LOGISTICS_SHOCK_EVENT_IDS: ReadonlySet<string> = new Set([
+  ...SUPPLY_DISRUPTION_EVENT_IDS,
+  ...[...BLACK_SWAN_EVENT_IDS].filter((id) => SUPPLY_SWANS.has(id)),
+]);
+
 // A small self-contained PRNG (as the narrative layer uses) so the Phase 23 supply
 // events are deterministic in (seed, month) WITHOUT drawing from world.rng — keeping the
 // pre-P23 seed stream byte-identical until a route is actually cut (S2, P-X2). A route
@@ -107,6 +154,26 @@ export function rollRandomEvents(world: WorldState): WorldEvent[] {
     if (roll < def.probability) {
       const sev = def.severityRange[0] + supplyRng() * (def.severityRange[1] - def.severityRange[0]);
       const dur = def.durationRange[0] + supplyRng() * (def.durationRange[1] - def.durationRange[0]);
+      out.push({
+        id: `${def.id}_${world.month}`,
+        definitionId: def.id,
+        severity: sev,
+        startedMonth: world.month,
+        durationRemaining: Math.round(dur),
+        affectedIndustries: def.affectedIndustries,
+      });
+    }
+  }
+  // Phase 24.5: the black swans, on their OWN (seed, month) side-stream — a different salt
+  // from the supply stream so neither perturbs the other, and neither touches world.rng.
+  // Rare and un-seasoned; at most one of a kind live at a time, as with the weather.
+  const swanRng = mulberry32((Math.imul(world.seed >>> 0, 0x27d4eb2f) + world.month * 0x165667b1 + 0x9e3779b9) >>> 0);
+  for (const def of BLACK_SWAN_EVENTS) {
+    if (world.events.some((e) => e.definitionId === def.id)) continue;
+    const roll = swanRng();
+    if (roll < def.probability) {
+      const sev = def.severityRange[0] + swanRng() * (def.severityRange[1] - def.severityRange[0]);
+      const dur = def.durationRange[0] + swanRng() * (def.durationRange[1] - def.durationRange[0]);
       out.push({
         id: `${def.id}_${world.month}`,
         definitionId: def.id,

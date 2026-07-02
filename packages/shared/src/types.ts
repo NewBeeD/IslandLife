@@ -35,6 +35,16 @@ export interface Asset {
   // ventures that share it, so two ventures using one truck pay one fuel line.
   // Undefined → upkeep is carried at the venture level (the pre-Phase-17 path).
   monthlyUpkeep?: number;
+  // Phase 24.3 (A20): the world month this asset was acquired, stamped when the player
+  // buys it (an upgrade rung, a new venture's equipment). Its age drives depreciation —
+  // value falls, upkeep creeps up, and the owning venture's output eases down — so gear
+  // wears out and the player must reinvest. Undefined → an untracked asset (every NPC
+  // asset, every pre-Phase-24 snapshot): it never ages, so the digest holds.
+  acquiredMonth?: number;
+  // Phase 24.3 (A16/A20): set once a technology step has made this asset's whole class
+  // obsolete — its value and its venture's output have already been cut the once. Undefined
+  // → not obsolete (byte-identical). A tech step is rare and reshapes what is worth owning.
+  obsolete?: boolean;
 }
 
 export interface Loan {

@@ -1,6 +1,6 @@
 import type { MacroState, WorldState } from '@island/shared';
 import { clamp, clamp01 } from './rng';
-import { SUPPLY_DISRUPTION_EVENT_IDS } from './events';
+import { LOGISTICS_SHOCK_EVENT_IDS } from './events';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PHASE 20 — the economic web (systemic interaction, #26).
@@ -120,13 +120,14 @@ export function initialMacroState(baseInterestRate: number): MacroState {
   };
 }
 
-// The worst active logistics/route disruption this month (P23.2): the severity of the
-// most severe live choke-point event, or 0 when none is running. Read by recomputeMacro
-// to hold supplyDisruption up while a route is cut, then let it decay once it reopens.
+// The worst active logistics shock this month: the severity of the most severe live
+// event that strands goods — a Phase 23.2 route cut, or a Phase 24.5 pandemic/spill that
+// shutters ports and coast — or 0 when none is running. Read by recomputeMacro to hold
+// supplyDisruption up while the shock lasts, then let it decay once it passes.
 function activeSupplyDisruption(world: WorldState): number {
   let worst = 0;
   for (const e of world.events) {
-    if (SUPPLY_DISRUPTION_EVENT_IDS.has(e.definitionId) && e.severity > worst) worst = e.severity;
+    if (LOGISTICS_SHOCK_EVENT_IDS.has(e.definitionId) && e.severity > worst) worst = e.severity;
   }
   return clamp01(worst);
 }
