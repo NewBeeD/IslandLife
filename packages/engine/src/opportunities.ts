@@ -59,6 +59,7 @@ import {
 } from './investing';
 import { isWageIndustry, refreshWageRates, wageDailyRate, wageMonthlyIncome } from './wages';
 import { surfaceJobs } from './jobs';
+import { applyDemandOutcome, canHandleDemand } from './attention';
 import { clamp } from './rng';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -761,6 +762,32 @@ export function resolveDecision(
       decision.consequenceMonth = null;
       if (opportunity) opportunity.status = 'DECLINED';
     }
+    return decision;
+  }
+
+  // A competing management demand (Phase 26): HANDLE spends the attention to steer it
+  // (refused when the budget is already full — the player must let something go); LET_GO
+  // applies its default outcome now. Either way the fallout is felt immediately, so there
+  // is no delayed MEMORY (the consequence path is cleared).
+  if (decision.kind === 'MANAGEMENT_DEMAND') {
+    decision.consequenceMonth = null;
+    const demand = opportunity?.demand;
+    const action = option.effect.demandAction;
+    if (!demand || !action) {
+      if (opportunity) opportunity.status = 'DECLINED';
+      return decision;
+    }
+    if (action === 'HANDLE' && !canHandleDemand(world, demand, decision.id)) {
+      // Roll back the partial resolution — there is no attention left for this.
+      decision.chosenOptionId = null;
+      decision.resolvedMonth = null;
+      throw new DecisionError(
+        'You cannot give this the attention it needs right now — you would have to let something else go first.',
+        'BAD_OPTION',
+      );
+    }
+    applyDemandOutcome(world, demand, action === 'HANDLE');
+    if (opportunity) opportunity.status = action === 'HANDLE' ? 'ACCEPTED' : 'DECLINED';
     return decision;
   }
 

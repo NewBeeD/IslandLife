@@ -31,11 +31,15 @@ export function Opportunities({
   opportunities: OpportunitiesDTO;
   onResolved: () => void | Promise<void>;
 }) {
-  const { active, possible, expired } = opportunities;
+  const { active, possible, expired, attention } = opportunities;
   const nothing = active.length === 0 && possible.length === 0 && expired.length === 0;
 
   return (
     <div className="opps">
+      {/* Phase 26: the month's management attention — how full the plate is, and whether
+          everything on it can be seen to (P26.1). */}
+      {attention && <p className="opps__attention">{attention}</p>}
+
       {/* Phase 18: standing actions the player can take any time, not surfaced offers. */}
       <section className="opps__standing">
         <RaiseMoneyButton saveId={saveId} onResolved={onResolved} />

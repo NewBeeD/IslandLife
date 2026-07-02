@@ -48,6 +48,7 @@ export function buildDecisionSituation(world: WorldState, decision: PlayerDecisi
   if (decision.kind === 'PARTNERSHIP') return buildPartnershipSituation(world, decision);
   if (decision.kind === 'SIDE_JOB') return buildSideJobSituation(world, decision);
   if (decision.kind === 'INVEST_SOLICITATION') return buildInvestSituation(world, decision);
+  if (decision.kind === 'MANAGEMENT_DEMAND') return buildDemandSituation(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'the buyer';
   const amount = standingAmount(decision);
@@ -264,6 +265,70 @@ function buildInvestSituation(world: WorldState, decision: PlayerDecision): stri
   );
 }
 
+// The framing of a competing management demand (Phase 26): a matter that has landed on
+// the player's plate and wants a decision, set against everything else already pulling
+// at their week. The genuine trade-off — give it the hours it needs, or let it take its
+// own course — stated in prose, with the weight of a full plate. No mechanics.
+function buildDemandSituation(world: WorldState, decision: PlayerDecision): string {
+  const opp = findOpportunity(world, decision);
+  const d = opp?.demand;
+  const place = parishName(world);
+  const what = d?.ventureLabel ?? 'the work';
+  if (!d) {
+    return `Something has landed that wants seeing to, on top of everything else your week already holds.`;
+  }
+  const tail =
+    `There are only so many hours in a week, and yours are already spoken for. What you give ` +
+    `to this, you take from something else. Do you take it on, or let it run its own course?`;
+  switch (d.kind) {
+    case 'SUPPLIER_SHORTAGE':
+      return (
+        `The word reaches you mid-week: what ${what} runs on has gone scarce. The usual supply ` +
+        `is not coming, not at the price you know, maybe not at all for a while. You could put ` +
+        `the days in to chase it down elsewhere and lay out what it costs to secure it — or you ` +
+        `could let ${what} run short and swallow the custom you lose for it.\n\n${tail}`
+      );
+    case 'LABOUR_TROUBLE':
+      return (
+        `There is bad blood among the hands you count on for ${what}. Something between them has ` +
+        `soured, and the work is suffering for it — slow, tense, an argument waiting to happen. ` +
+        `You could step in, hear it out, spend the time and perhaps a little money to set it ` +
+        `right. Or you could keep your distance and hope it burns itself out before it costs ` +
+        `you dear.\n\n${tail}`
+      );
+    case 'LAUNCH':
+      return (
+        `${capitalise(what)} is barely off the ground, and these first weeks are the ones that ` +
+        `tell. It wants a steady hand on it — yours — while it finds its rhythm and people learn ` +
+        `to trust it. Give it that and it stands the stronger for years. Leave it to fend for ` +
+        `itself while you see to other things, and it may take root badly, or not at all.\n\n${tail}`
+      );
+    case 'AUDIT':
+      return (
+        `A letter comes, official and unhurried, saying your books are to be examined. It is ` +
+        `nothing you cannot meet — if you find the time to get everything straight, and pay ` +
+        `someone who knows the forms to sit with you. Or you could set it aside, tell yourself ` +
+        `it will keep, and answer them when they press. Around ${place} the ones who take it ` +
+        `lightly are the ones it catches out.\n\n${tail}`
+      );
+    case 'PRICE_WAR':
+      return (
+        `Someone has moved on your trade. A rival has cut their prices to the bone to pull ` +
+        `${what}'s custom their way, and you can feel it already in the quiet weeks. You could ` +
+        `meet them — put your attention on it, shave your own margin, fight to hold what is ` +
+        `yours. Or you could ride it out with your prices where they are and watch the custom ` +
+        `drift for a season.\n\n${tail}`
+      );
+    case 'ACQUISITION':
+      return (
+        `Word comes that someone wants to buy ${what} off you. It has done well enough that it ` +
+        `has caught an eye, and there is real money being talked about. You could sit down with ` +
+        `them, hear the offer, and take it if it is good — cash in hand, and ${what} theirs to ` +
+        `run from here. Or you could send them on their way and keep what you built.\n\n${tail}`
+      );
+  }
+}
+
 // A short, in-voice acknowledgement of the choice just made — the line the
 // resolution returns. No outcome, no judgement; the consequence comes later.
 export function buildDecisionAcknowledgement(world: WorldState, decision: PlayerDecision): string {
@@ -274,6 +339,7 @@ export function buildDecisionAcknowledgement(world: WorldState, decision: Player
   if (decision.kind === 'PARTNERSHIP') return buildPartnershipAcknowledgement(world, decision);
   if (decision.kind === 'SIDE_JOB') return buildSideJobAcknowledgement(world, decision);
   if (decision.kind === 'INVEST_SOLICITATION') return buildInvestAcknowledgement(world, decision);
+  if (decision.kind === 'MANAGEMENT_DEMAND') return buildDemandAcknowledgement(world, decision);
   const opp = findOpportunity(world, decision);
   const name = opp?.npcName ?? 'her';
   const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
@@ -380,6 +446,33 @@ function buildInvestAcknowledgement(world: WorldState, decision: PlayerDecision)
   return (
     `You put it in for a cut off the top of what ${name} sells. Every month's takings carry a little ` +
     `of yours now — you will feel the good months and the thin ones both.`
+  );
+}
+
+// The acknowledgement after triaging a competing demand (Phase 26): the matter taken in
+// hand, or set down to run its own course. No outcome — how it falls out is felt in the
+// weeks that follow, or in the plain notice when a neglected matter settles itself.
+function buildDemandAcknowledgement(world: WorldState, decision: PlayerDecision): string {
+  const opp = findOpportunity(world, decision);
+  const what = opp?.demand?.ventureLabel ?? 'the work';
+  const chosen = decision.options.find((o) => o.id === decision.chosenOptionId);
+  const handled = chosen?.effect.demandAction === 'HANDLE';
+  if (opp?.demand?.kind === 'ACQUISITION') {
+    return handled
+      ? `You sit down with the buyer. ${capitalise(what)} passes into other hands, and the money ` +
+          `is yours — a chapter closed, and something to show for it.`
+      : `You send them on their way. ${capitalise(what)} stays yours, offer or no offer, and your ` +
+          `week goes on as it was.`;
+  }
+  if (handled) {
+    return (
+      `You put it at the front of the week and see to it yourself. It takes the hours it takes, ` +
+      `and it means something else waits — but this one you have in hand.`
+    );
+  }
+  return (
+    `You let it be. You have enough in front of you, and this will settle one way or another ` +
+    `without you standing over it. You make your peace with whatever that turns out to be.`
   );
 }
 

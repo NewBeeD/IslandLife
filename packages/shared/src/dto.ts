@@ -299,6 +299,12 @@ export interface OpportunitiesDTO {
   active: OpportunityDTO[];
   possible: OpportunityDTO[];
   expired: OpportunityDTO[];
+  // The player's management attention this month, as prose (Phase 26) — how much of
+  // their plate is spoken for and whether the demands on the table can all be met, or
+  // some must be let go. Never a number/score (S3). Absent when nothing is pressing
+  // and the player has room to spare, so it appears only once attention is a live
+  // constraint worth surfacing.
+  attention?: string;
 }
 
 // GET /saves/:id/decisions/:did — the decision interface. Situation as a narrative

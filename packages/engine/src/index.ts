@@ -252,6 +252,19 @@ export {
 } from './jobs';
 export type { TakeJobResult } from './jobs';
 export { agePlayerAssets } from './aging';
+export {
+  surfaceDemands,
+  resolveUnattendedDemands,
+  applyDemandOutcome,
+  canHandleDemand,
+  freeAttention,
+  committedAttention,
+  attentionCapacity,
+  attentionPressure,
+  openDemands,
+  ATTENTION_CAPACITY,
+} from './attention';
+export type { AttentionPressure } from './attention';
 export { fundResearch, researchCost as researchProjectCost, ResearchError } from './research';
 export type { ResearchOutcome, ResearchResult } from './research';
 export {

@@ -43,7 +43,30 @@ function titleFor(decision: PlayerDecision, opp: Opportunity | undefined): strin
   if (decision.kind === 'PARTNERSHIP') return opp?.partnership ? `Going in with ${opp.partnership.partnerName}` : 'A partnership';
   if (decision.kind === 'SIDE_JOB') return 'A job on the side';
   if (decision.kind === 'INVEST_SOLICITATION') return opp?.invest ? `Putting money into ${opp.invest.ventureLabel}` : 'A place to put money';
+  if (decision.kind === 'MANAGEMENT_DEMAND') return demandDecisionTitle(opp);
   return 'A decision';
+}
+
+// The title of a competing-demand decision (Phase 26) — the matter itself, named plainly.
+function demandDecisionTitle(opp: Opportunity | undefined): string {
+  const d = opp?.demand;
+  const what = d?.ventureLabel ?? 'the work';
+  switch (d?.kind) {
+    case 'SUPPLIER_SHORTAGE':
+      return `A supply gone short — ${what}`;
+    case 'LABOUR_TROUBLE':
+      return `Trouble among the hands — ${what}`;
+    case 'LAUNCH':
+      return `Getting ${what} on its feet`;
+    case 'AUDIT':
+      return 'The taxman comes asking';
+    case 'PRICE_WAR':
+      return `Undercut on price — ${what}`;
+    case 'ACQUISITION':
+      return `A buyer for ${what}`;
+    default:
+      return 'A matter to see to';
+  }
 }
 
 // The financeable purchase behind a FINANCING decision — an asset upgrade or a new
@@ -137,15 +160,20 @@ export function toDecisionDTO(world: WorldState, decisionId: string): DecisionDT
     decision.kind === 'NEW_VENTURE' ||
     decision.kind === 'EDUCATION_ENROLMENT';
   const monthsLeft = opp ? opp.surfacedMonth + opp.windowMonths - world.month : 0;
+  const isDemand = decision.kind === 'MANAGEMENT_DEMAND';
   const window = expired
     ? 'The moment has passed.'
     : monthsLeft <= 1
-      ? isFinancing
-        ? 'The offer holds only this month.'
-        : 'She needs an answer this month.'
-      : isFinancing
-        ? 'It is there for now, but not forever.'
-        : 'She is waiting on your word, but not forever.';
+      ? isDemand
+        ? 'Act this month, or it settles itself.'
+        : isFinancing
+          ? 'The offer holds only this month.'
+          : 'She needs an answer this month.'
+      : isDemand
+        ? 'It will not wait long before it settles one way or another.'
+        : isFinancing
+          ? 'It is there for now, but not forever.'
+          : 'She is waiting on your word, but not forever.';
 
   // Phase 18 (P18.3): a partnership can be negotiated — surface the default split so the
   // client can offer "go in at this split" or "propose your own".

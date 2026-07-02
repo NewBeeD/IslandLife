@@ -638,6 +638,16 @@ button:disabled {
   padding-bottom: 1.2rem;
   border-bottom: 1px solid var(--line);
 }
+/* Phase 26: the month's attention read — a quiet framing line above the offers. */
+.opps__attention {
+  margin: 0 0 1.2rem;
+  padding: 0.7rem 1rem;
+  background: rgba(31, 93, 107, 0.06);
+  border-left: 3px solid var(--sea);
+  border-radius: 4px;
+  font-style: italic;
+  color: var(--ink);
+}
 .opps__action,
 .opps__studies {
   display: flex;

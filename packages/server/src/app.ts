@@ -25,11 +25,13 @@ import {
   reopenVenture,
   repayLoan,
   resolveDecision,
+  resolveUnattendedDemands,
   resumeEducation,
   sellAssetNow,
   setLoanInstallment,
   shelveVenture,
   simulateOneMonth,
+  surfaceDemands,
   surfaceOpportunities,
   takeJob,
   updatePlayerIncome,
@@ -673,6 +675,12 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
     simulateOneMonth(world);
     const entries = generateMonthlyEntries(world);
 
+    // Phase 26: settle any competing management demand the player never got to before
+    // its window closed — it resolves on its (usually worse) default and leaves a plain
+    // notice, rather than piling up as a chore (S8). Runs before the notification drain
+    // below so the fallout shows in this month's feed.
+    resolveUnattendedDemands(world);
+
     // Phase 12: surface any in-month notices the engine queued this advance (a patient
     // sale that settled, collateral seized after a default) as feed entries, then
     // clear the queue so each notice is shown exactly once.
@@ -686,6 +694,11 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
     // MEMORY entry alongside the template feed (P6.4). Both are deterministic and
     // ride the synchronous write, so the slice plays fully offline.
     surfaceOpportunities(world);
+    // Phase 26: surface this month's competing management demands (a shortage, a strike,
+    // a launch, an audit, a price war, a buyer) onto the plate, on their own side-stream
+    // so world.rng and the determinism digest are untouched. The player triages them
+    // against a limited attention budget.
+    surfaceDemands(world);
     const consequences: NarrativeEntry[] = detectDueConsequences(world).map((d) =>
       generateConsequenceEntry(world, d),
     );

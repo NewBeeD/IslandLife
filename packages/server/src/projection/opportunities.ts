@@ -1,6 +1,7 @@
 import { formatCurrency } from '@island/narrative';
 import { opportunityLogicalKey } from '@island/shared';
-import type { Opportunity, OpportunitiesDTO, OpportunityDTO, WorldState } from '@island/shared';
+import { attentionPressure, openDemands } from '@island/engine';
+import type { DemandKind, Opportunity, OpportunitiesDTO, OpportunityDTO, WorldState } from '@island/shared';
 
 // GET /saves/:id/opportunities — only what the player has heard of, through their
 // own information channels, and always unlabelled: no expectedReturn, no riskLevel,
@@ -18,7 +19,48 @@ function titleFor(opp: Opportunity): string {
   if (opp.kind === 'PARTNERSHIP' && opp.partnership) return `Going in together — ${opp.partnership.companyName}`;
   if (opp.kind === 'SIDE_JOB' && opp.sideJob) return `A job on the side — ${opp.sideJob.label}`;
   if (opp.kind === 'INVEST_SOLICITATION' && opp.invest) return `${opp.invest.investeeName} wants backing`;
+  if (opp.kind === 'MANAGEMENT_DEMAND' && opp.demand) return demandTitle(opp.demand.kind, opp.demand.ventureLabel);
   return opp.npcName;
+}
+
+// The short title of a competing management demand (Phase 26). Names the matter and,
+// where it concerns one, the venture — never the mechanics.
+function demandTitle(kind: DemandKind, ventureLabel?: string): string {
+  const what = ventureLabel ?? 'the work';
+  switch (kind) {
+    case 'SUPPLIER_SHORTAGE':
+      return `Supply running short — ${what}`;
+    case 'LABOUR_TROUBLE':
+      return `Trouble among the hands — ${what}`;
+    case 'LAUNCH':
+      return `Finding its feet — ${what}`;
+    case 'AUDIT':
+      return 'The taxman comes asking';
+    case 'PRICE_WAR':
+      return `Undercut on price — ${what}`;
+    case 'ACQUISITION':
+      return `A buyer circling — ${what}`;
+  }
+}
+
+// The unlabelled prose of a demand (Phase 26): the matter and the genuine trade-off of
+// acting versus letting it go, no numbers, no risk labels.
+function demandDescription(kind: DemandKind, ventureLabel?: string): string {
+  const what = ventureLabel ?? 'the work';
+  switch (kind) {
+    case 'SUPPLIER_SHORTAGE':
+      return `What ${what} needs to run has gone scarce. You could put your time and some money into securing it elsewhere, or let it run short and take the lost custom.`;
+    case 'LABOUR_TROUBLE':
+      return `The hands you rely on for ${what} are at odds over something. You could sit down and settle it, or stay out and hope it cools before it costs you.`;
+    case 'LAUNCH':
+      return `${capitalise(what)} is new and unsteady on its feet. Time on it now — your own hands — would give it a real start; leave it to itself and it may bed in poorly.`;
+    case 'AUDIT':
+      return 'Word comes that your books are to be looked at. Meet it prepared, with the time and a little money it takes, or let it slide and risk it going against you.';
+    case 'PRICE_WAR':
+      return `A rival has cut prices to draw ${what}'s custom away. You could meet them and defend your share, or ride it out and let the trade drift for a while.`;
+    case 'ACQUISITION':
+      return `Someone wants to buy ${what} from you. You could hear them out and take the money, or send them on and keep it yours.`;
+  }
 }
 
 function descriptionFor(opp: Opportunity): string {
@@ -105,6 +147,9 @@ function descriptionFor(opp: Opportunity): string {
       `the upside. It is their venture you would be backing, for better or worse.`
     );
   }
+  if (opp.kind === 'MANAGEMENT_DEMAND' && opp.demand) {
+    return demandDescription(opp.demand.kind, opp.demand.ventureLabel);
+  }
   return 'An arrangement put to you.';
 }
 
@@ -116,6 +161,7 @@ function sourceFor(opp: Opportunity): string {
   if (opp.kind === 'PARTNERSHIP') return `Heard: directly from ${opp.npcName}.`;
   if (opp.kind === 'SIDE_JOB') return 'Word: a job going round.';
   if (opp.kind === 'INVEST_SOLICITATION') return `Heard: directly from ${opp.npcName}.`;
+  if (opp.kind === 'MANAGEMENT_DEMAND') return 'On your plate: needing a decision.';
   return `Heard: directly from ${opp.npcName}.`;
 }
 
@@ -141,6 +187,11 @@ function windowFor(opp: Opportunity, world: WorldState): string {
   }
   if (opp.kind === 'INVEST_SOLICITATION') {
     return monthsLeft <= 1 ? 'They need an answer this month.' : 'They are waiting on your word, but not forever.';
+  }
+  if (opp.kind === 'MANAGEMENT_DEMAND') {
+    return monthsLeft <= 1
+      ? 'Act this month, or it settles itself.'
+      : 'It will not wait long before it settles one way or another.';
   }
   if (monthsLeft <= 1) return 'She needs an answer this month.';
   return 'She is waiting on your word, but not forever.';
@@ -197,5 +248,30 @@ export function toOpportunitiesDTO(world: WorldState): OpportunitiesDTO {
     .sort((a, b) => b.surfacedMonth - a.surfacedMonth)
     .slice(0, EXPIRED_CAP)
     .map((opp) => toDTO(opp, world));
-  return { active, possible: [], expired };
+  return { active, possible: [], expired, attention: attentionNote(world) };
+}
+
+// The player's management attention this month, as prose (Phase 26, P26.1). It names
+// the pressure — and, when several matters press at once, that they cannot all be met —
+// so the prioritization screen reads as a felt squeeze, never a number (S3). Absent when
+// nothing is pressing and there is room to spare, so it appears only as a real constraint.
+function attentionNote(world: WorldState): string | undefined {
+  const demands = openDemands(world).length;
+  const pressure = attentionPressure(world);
+  if (pressure === 'LIGHT' && demands === 0) return undefined;
+  if (pressure === 'OVERWHELMED') {
+    return (
+      'More is being asked of you than one person can see to this month. You will not get to ' +
+      'all of it — decide what matters most and let the rest take its own course.'
+    );
+  }
+  if (pressure === 'STRETCHED') {
+    return demands > 1
+      ? 'Your plate is close to full, and more than one thing wants your hand. Pick carefully — you may not manage them all.'
+      : 'Your plate is close to full. There is room for what is in front of you, but not much beyond it.';
+  }
+  if (demands > 0) {
+    return 'You have a matter or two wanting a decision, and the room to see to them if you choose.';
+  }
+  return 'You are managing what you carry, with a little room to spare.';
 }

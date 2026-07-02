@@ -686,7 +686,8 @@ export type OpportunityKind =
   | 'CROWDFUND'
   | 'PARTNERSHIP'
   | 'SIDE_JOB'
-  | 'INVEST_SOLICITATION';
+  | 'INVEST_SOLICITATION'
+  | 'MANAGEMENT_DEMAND';
 export type OpportunityStatus = 'OPEN' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
 
 // The hidden spec of a new-venture opportunity (Phase 10). Cross-domain entry: a
@@ -844,6 +845,42 @@ export interface PlayerInvestment {
   totalReturned?: number;
 }
 
+// ── Time as a resource: competing management demands (Phase 26) ──────────────
+// The player cannot do everything each month. On top of Phase 17's standing venture
+// time load, transient MATTERS arise that compete for a limited monthly attention
+// budget (P26.1) — a supplier shortage, a labour dispute, a new venture's launch, a
+// tax audit, a price war, a buyer circling. Each is surfaced as an Opportunity the
+// player triages: HANDLE it (spend attention, sometimes a little cash, to steer the
+// outcome) or leave it, in which case it resolves on a (usually worse) DEFAULT when
+// its window closes — it does not pile up as a chore (S8, C16/A14). The skill is
+// choosing what to ignore when several land at once. All figures here are hidden
+// mechanics; the player reads the matter, the trade-off, and the fallout in prose.
+export type DemandKind =
+  | 'SUPPLIER_SHORTAGE' // a running venture's inputs run short
+  | 'LABOUR_TROUBLE' // an operator-run venture / firm has a staff dispute
+  | 'LAUNCH' // a freshly-started venture needs hands-on to bed in
+  | 'AUDIT' // the taxman comes asking for the books
+  | 'PRICE_WAR' // a rival undercuts a venture in a crowded trade
+  | 'ACQUISITION'; // a buyer circles a venture doing well
+
+export interface DemandSpec {
+  id: string; // stable per surfaced demand
+  kind: DemandKind;
+  industry: Industry;
+  ventureId?: string; // the venture it concerns (absent for a whole-player matter, e.g. AUDIT)
+  ventureLabel?: string; // player-facing label of that venture
+  severity: number; // 0–1, how big the matter is (scales the stakes)
+  attentionCost: number; // 0–1 of the monthly budget that HANDLING it draws
+  // Hidden per-outcome mechanics (never projected raw). Which apply depends on `kind`.
+  handleCashCost?: number; // EC$ paid to handle it well (secure supply, an accountant)
+  ignoreCashPenalty?: number; // EC$ lost if it resolves on its default (spoilage, a fine)
+  ignoreDemandFloor?: number; // customerReputation floor a neglected matter drops the venture to
+  handleOutputDelta?: number; // outputScale a well-handled LAUNCH permanently adds
+  ignoreOutputDelta?: number; // outputScale a fumbled LAUNCH sheds
+  reputationHit?: number; // financial/civic reputation drop if a default lands (AUDIT)
+  acquisitionOffer?: number; // EC$ a buyer pays for the venture on HANDLE (ACQUISITION)
+}
+
 export interface Opportunity {
   id: string;
   kind: OpportunityKind;
@@ -866,6 +903,7 @@ export interface Opportunity {
   partnership?: PartnershipSpec; // present for PARTNERSHIP opportunities (Phase 11)
   sideJob?: SideJobSpec; // present for SIDE_JOB opportunities (Phase 15)
   invest?: InvestSolicitationSpec; // present for INVEST_SOLICITATION opportunities (Phase 18)
+  demand?: DemandSpec; // present for MANAGEMENT_DEMAND opportunities (Phase 26)
 }
 
 // The logical identity of an offer — the (kind, target) it concerns, independent of
@@ -891,6 +929,8 @@ export function opportunityLogicalKey(opp: Opportunity): string {
       return `SIDE_JOB:${opp.sideJob?.id ?? ''}`;
     case 'INVEST_SOLICITATION':
       return `INVEST_SOLICITATION:${opp.invest?.investeeId ?? ''}:${opp.invest?.id ?? ''}`;
+    case 'MANAGEMENT_DEMAND':
+      return `MANAGEMENT_DEMAND:${opp.demand?.kind ?? ''}:${opp.demand?.ventureId ?? ''}`;
   }
 }
 
@@ -938,6 +978,7 @@ export interface DecisionOption {
     accept?: boolean; // PARTNERSHIP — true on the "go in" option
     sideJobPayout?: number; // SIDE_JOB — EC$ paid on completion of the "take it" option
     invest?: { structure: InvestReturnStructure }; // INVEST_SOLICITATION — chosen return shape
+    demandAction?: 'HANDLE' | 'LET_GO'; // MANAGEMENT_DEMAND — attend to the matter, or let it resolve on its default (Phase 26)
   };
 }
 
